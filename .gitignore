@@ -17,5 +17,4 @@ default-env.json
 .cdsrc-private.json
 *.log
 .DS_Store
-.vscode/
 coverage/
