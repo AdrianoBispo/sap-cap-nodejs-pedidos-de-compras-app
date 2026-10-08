@@ -11,6 +11,7 @@
  *    comparados sem acentos, espaços, pontuação ou diferença de caixa, e cada
  *    coluna aceita sinônimos. Colunas extras são ignoradas.
  */
+import { TextDecoder } from 'node:util'
 import { inflateRawSync } from 'node:zlib'
 
 export const MAX_LINHAS = 500
@@ -121,7 +122,7 @@ function lerCsv(conteudo) {
   } catch {
     texto = new TextDecoder('windows-1252').decode(conteudo)
   }
-  texto = texto.replace(/^﻿/, '')
+  texto = texto.replace(/^\uFEFF/, '')
   const primeira = texto.split(/\r?\n/).find(l => l.trim() !== '') ?? ''
   const separador = [';', ',', '\t'].reduce((melhor, sep) =>
     contarForaDeAspas(primeira, sep) > contarForaDeAspas(primeira, melhor) ? sep : melhor, ';')
@@ -237,12 +238,10 @@ function lerXlsx(conteudo) {
       const idx = indiceColuna(atributos.match(/\br="([A-Z]+)\d*"/)?.[1] ?? '')
       const tipo = atributos.match(/\bt="(\w+)"/)?.[1] ?? 'n'
       const v = corpo.match(/<v>([\s\S]*?)<\/v>/)?.[1]
-      let texto = ''
-      if (tipo === 's') texto = compartilhados[Number(v)] ?? ''
-      else if (tipo === 'inlineStr') texto = textoDe(corpo.match(/<is>([\s\S]*?)<\/is>/)?.[1] ?? '')
-      else if (tipo === 'b') texto = v === '1' ? 'true' : 'false'
-      else texto = v !== undefined ? decodificarXml(v) : ''
-      celulas[idx] = texto
+      celulas[idx] = tipo === 's' ? compartilhados[Number(v)] ?? ''
+        : tipo === 'inlineStr' ? textoDe(corpo.match(/<is>([\s\S]*?)<\/is>/)?.[1] ?? '')
+          : tipo === 'b' ? (v === '1' ? 'true' : 'false')
+            : v !== undefined ? decodificarXml(v) : ''
     }
     linhas.push({ numero, celulas: Array.from(celulas, c => c ?? '') })
   }

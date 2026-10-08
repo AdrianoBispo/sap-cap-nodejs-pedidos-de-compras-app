@@ -21,7 +21,7 @@ const COLUNAS = [
   { campo: 'E-mail', sinonimos: ['EMAILDOCLIENTE'], obrigatoria: true },
   { campo: 'Telefone', sinonimos: ['CELULAR', 'FONE', 'TELEFONECELULAR'], obrigatoria: true },
   { campo: 'Gênero', sinonimos: ['SEXO'] },
-  { campo: 'Data de nascimento', sinonimos: ['NASCIMENTO', 'DATANASC', 'DTNASCIMENTO'], obrigatoria: true },
+  { campo: 'Data de nascimento', sinonimos: ['NASCIMENTO', 'DATANASC', 'DATANASCIMENTO', 'DTNASCIMENTO'], obrigatoria: true },
   { campo: 'CEP', obrigatoria: true },
   { campo: 'Número', sinonimos: ['NUM', 'NRO', 'NUMEROENDERECO'], obrigatoria: true },
   { campo: 'Complemento' }

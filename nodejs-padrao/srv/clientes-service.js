@@ -11,7 +11,7 @@ import cds from '@sap/cds'
 import { randomInt } from 'node:crypto'
 import { preencherEnderecoPorCep, validarEnderecosDoCliente } from './lib/enderecos.js'
 import { importarClientes } from './lib/importacao-clientes.js'
-import { erro } from './lib/mensagens.js'
+import { erro, rejeitar } from './lib/mensagens.js'
 import { chave, ehRascunho, lerConteudo } from './lib/requisicao.js'
 import { somenteDigitos, validarCpf, validarImagem } from './lib/util.js'
 
@@ -45,7 +45,7 @@ export default class ClientesService extends cds.ApplicationService {
       const conteudo = await lerConteudo(req.data.fotoCliente)
       req.data.fotoCliente = conteudo
       const mime = req.data.fotoClienteMimeType ?? req.headers?.['content-type']
-      if (!validarImagem(conteudo, mime, req.data.fotoClienteNome)) erro(req, 400, 'FOTO_FORMATO_INVALIDO', {}, 'fotoCliente')
+      if (!validarImagem(conteudo, mime, req.data.fotoClienteNome)) rejeitar(req, 400, 'FOTO_FORMATO_INVALIDO', {}, 'fotoCliente')
     }
     this.before(['PATCH', 'UPDATE'], Clientes.drafts, validarFoto)
     this.before(['CREATE', 'UPDATE'], Clientes, validarFoto)

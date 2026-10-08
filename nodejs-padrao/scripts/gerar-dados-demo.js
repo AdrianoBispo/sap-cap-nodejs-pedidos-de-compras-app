@@ -11,6 +11,7 @@
  *
  * Uso: node scripts/gerar-dados-demo.js
  */
+/* eslint-disable no-console -- script de linha de comando */
 import { createHash } from 'node:crypto'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'

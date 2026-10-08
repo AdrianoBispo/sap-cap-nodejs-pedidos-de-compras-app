@@ -11,7 +11,7 @@ annotate db.Clientes with {
   cpf            @mandatory;
   nome           @mandatory;
   email          @mandatory  @assert.format: {
-    $value : '^[a-z0-9._%+\-]+@[a-z0-9\-]+(\.[a-z0-9\-]+)*\.[a-z]{2,}$',
+    $value : '^[a-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$',
     message: 'EMAIL_INVALIDO'
   };
   telefone       @mandatory  @assert: (case
