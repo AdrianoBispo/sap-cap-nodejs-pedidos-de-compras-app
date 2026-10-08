@@ -7,6 +7,8 @@ import assert from 'node:assert/strict'
 import { iniciarServidor, falha, COMUM } from './apoio/contexto.js'
 import { gerarXlsx } from './apoio/xlsx.js'
 import { calcularDvCpf } from '../srv/lib/util.js'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 
 const api = iniciarServidor()
 const csv = linhas => Buffer.from(linhas.map(l => l.join(';')).join('\n')).toString('base64')
@@ -97,5 +99,13 @@ describe('importação por planilha', () => {
   it('clientes e estoque exigem o perfil administrador', async () => {
     assert.equal((await falha(importar('clientes', csv([['CPF']]), COMUM))).status, 403)
     assert.equal((await falha(importar('estoque', csv([['Nome']]), COMUM))).status, 403)
+  })
+
+  it('os modelos de docs/modelos-importacao são importados (XLSX)', async () => {
+    const pasta = join(import.meta.dirname, '..', '..', 'docs', 'modelos-importacao')
+    const modelo = nome => readFileSync(join(pasta, `${nome}.xlsx`)).toString('base64')
+    assert.equal((await importar('clientes', modelo('clientes'))).data.registrosCriados, 3)
+    assert.equal((await importar('estoque', modelo('estoque'))).data.registrosCriados, 3)
+    assert.equal((await importar('pedidos', modelo('pedidos'))).data.registrosCriados, 2)
   })
 })
