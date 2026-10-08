@@ -14,7 +14,6 @@ using {pedidoscompras as db} from '../db/schema';
   'Comum',
   'Admin'
 ]
-@readonly
 service AnaliticoService {
 
   @Aggregation.ApplySupported: {
@@ -27,6 +26,7 @@ service AnaliticoService {
   @Aggregation.CustomAggregate #valorTotal : 'Edm.Decimal'
   @Aggregation.CustomAggregate #valorMedio : 'Edm.Decimal'
   @Aggregation.CustomAggregate #qtdePedidos: 'Edm.Int32'
+  @readonly
   entity PedidosAnalise    as
     select from db.Pedidos {
       key ID,
@@ -58,6 +58,7 @@ service AnaliticoService {
   }
   @Aggregation.CustomAggregate #qtdeClientes: 'Edm.Int32'
   @Aggregation.CustomAggregate #scoreMedio  : 'Edm.Decimal'
+  @readonly
   entity ClientesAnalise   as
     select from db.Clientes {
       key ID,
@@ -98,6 +99,7 @@ service AnaliticoService {
   @Aggregation.CustomAggregate #qtdeDisponivel: 'Edm.Int32'
   @Aggregation.CustomAggregate #valorEstoque  : 'Edm.Decimal'
   @Aggregation.CustomAggregate #qtdeItens     : 'Edm.Int32'
+  @readonly
   entity ItensAnalise      as
     select from db.Itens {
       key ID,
@@ -133,6 +135,7 @@ service AnaliticoService {
   }
   @Aggregation.CustomAggregate #valorReembolso: 'Edm.Decimal'
   @Aggregation.CustomAggregate #qtdeReembolsos: 'Edm.Int32'
+  @readonly
   entity ReembolsosAnalise as
     select from db.Reembolsos {
       key ID,
