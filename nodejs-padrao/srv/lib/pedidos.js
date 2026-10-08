@@ -1,0 +1,375 @@
+/**
+ * Regras de domínio do pedido, compartilhadas pelos serviços de Pedidos e de
+ * Reembolsos e pela importação por planilha.
+ *
+ * Porte da behavior pool ZBP_R_PC_PEDIDO: registro do pedido com reserva de
+ * estoque (ReservarEstoqueRegistro/ValidarRegistro), edição dos itens com
+ * reserva pela diferença (Activate), snapshots, cancelamento e as ações
+ * internas chamadas pelo BO Reembolso (CancelarPorReembolso/RetomarPedido).
+ *
+ * Todas as funções rodam na transação da requisição: se qualquer passo
+ * reporta erro (req.error), o CAP desfaz tudo ao final do handler.
+ */
+import cds from '@sap/cds'
+import { erro, info } from './mensagens.js'
+import { movimentarEstoque, MOVIMENTO } from './estoque.js'
+import { proximoNumeroPedido } from './numeracao.js'
+import { arredondar, formatarEndereco, somarQuantidades } from './util.js'
+
+const { SELECT, INSERT, UPDATE, DELETE } = cds.ql
+
+export const STATUS = Object.freeze({
+  aberto: 'ABERTO',
+  aguardandoAprovacao: 'AGUARDANDO_APROVACAO',
+  processandoReembolso: 'PROCESSANDO_REEMBOLSO',
+  cancelado: 'CANCELADO',
+  finalizado: 'FINALIZADO'
+})
+
+export const STATUS_PAGAMENTO = Object.freeze({
+  pendente: 'PENDENTE',
+  aprovado: 'APROVADO',
+  recusado: 'RECUSADO',
+  devolvido: 'DEVOLVIDO'
+})
+
+export const MOEDA_PADRAO = 'BRL'
+
+/** Campos do pedido mantidos só pelo backend (nunca vêm da UI). */
+export const CAMPOS_CONTROLADOS = [
+  'numeroPedido', 'statusPedido_code', 'statusPagamento_code', 'endereco_ID', 'enderecoPrincipalCompleto',
+  'valorTotal', 'currency_code', 'dataFinalizacao', 'motivoCancelamento', 'dataCancelamento', 'canceladoPor'
+]
+
+const db = () => cds.entities('pedidoscompras')
+
+/** Endereço principal atual do cliente: { ID, completo } ou null. */
+export async function enderecoPrincipal(clienteID) {
+  if (!clienteID) return null
+  const end = await SELECT.one.from(db().Enderecos)
+    .columns('ID', 'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'uf')
+    .where({ cliente_ID: clienteID, principal: true })
+  return end ? { ID: end.ID, completo: formatarEndereco(end) } : null
+}
+
+/** Quantidades já reservadas pelo pedido (itens gravados): Map item_ID -> qtde. */
+export async function reservaAtual(pedidoID) {
+  const linhas = await SELECT.from(db().ItensPedido).columns('item_ID', 'qtdeItemPedido').where({ pedido_ID: pedidoID })
+  return somarQuantidades(linhas)
+}
+
+/** Mensagem para uma ação não permitida no status atual (erro_status do RAP). */
+export function erroStatus(req, pedido) {
+  if (pedido.statusPedido_code === STATUS.finalizado) return erro(req, 409, 'PEDIDO_FINALIZADO_IMUTAVEL')
+  if (pedido.statusPedido_code === STATUS.cancelado) return erro(req, 409, 'PEDIDO_CANCELADO_IMUTAVEL')
+  return erro(req, 409, 'PEDIDO_STATUS_INVALIDO', { status: pedido.statusPedido_code })
+}
+
+async function carregarItens(ids) {
+  if (!ids.length) return new Map()
+  const linhas = await SELECT.from(db().Itens)
+    .columns('ID', 'sku', 'itemAtivo', 'precoUnitario', 'currency_code', 'qtdeEstoque', 'qtdeReservada')
+    .where({ ID: { in: ids } })
+  return new Map(linhas.map(i => [i.ID, i]))
+}
+
+/** Cliente ativo e com endereço principal; devolve o endereço principal. */
+async function validarCliente(req, clienteID) {
+  if (!clienteID) {
+    erro(req, 400, 'CAMPO_OBRIGATORIO', { campo: 'Cliente' }, 'cliente_ID')
+    return null
+  }
+  const cliente = await SELECT.one.from(db().Clientes, clienteID).columns('clienteAtivo')
+  if (!cliente || !cliente.clienteAtivo) {
+    erro(req, 409, 'CLIENTE_INATIVO', {}, 'cliente_ID')
+    return null
+  }
+  const endereco = await enderecoPrincipal(clienteID)
+  if (!endereco) erro(req, 409, 'CLIENTE_SEM_ENDERECO_PRINCIPAL', {}, 'cliente_ID')
+  return endereco
+}
+
+/**
+ * Registro do pedido (Save do rascunho novo ou criação direta/importação).
+ * Valida cliente, endereço, itens e disponibilidade; gera o número; fixa
+ * preços e total; reserva o estoque. Altera req.data (payload profundo).
+ */
+export async function registrarPedido(req) {
+  const pedido = req.data
+  for (const campo of CAMPOS_CONTROLADOS) delete pedido[campo]
+
+  const endereco = await validarCliente(req, pedido.cliente_ID)
+  const itens = pedido.itens ?? []
+  if (!itens.length) erro(req, 400, 'PEDIDO_SEM_ITENS')
+
+  const quantidades = somarQuantidades(itens)
+  const estoque = await carregarItens([...quantidades.keys()])
+  validarLinhas(req, itens, estoque, new Set(quantidades.keys()))
+  for (const [ID, qtde] of quantidades) {
+    const item = estoque.get(ID)
+    if (item && item.itemAtivo && qtde > item.qtdeEstoque - item.qtdeReservada) {
+      erro(req, 409, 'ITEM_ESTOQUE_INSUFICIENTE', { sku: item.sku, disponivel: item.qtdeEstoque - item.qtdeReservada })
+    }
+  }
+  if (req.errors) return
+
+  pedido.valorTotal = precificar(itens, estoque, new Map())
+  pedido.currency_code = MOEDA_PADRAO
+  pedido.statusPedido_code = STATUS.aberto
+  pedido.statusPagamento_code = STATUS_PAGAMENTO.pendente
+  pedido.endereco_ID = endereco.ID
+  pedido.enderecoPrincipalCompleto = endereco.completo
+  pedido.numeroPedido = await proximoNumeroPedido()
+
+  if (await movimentarEstoque(req, MOVIMENTO.reservar, quantidades)) {
+    info(req, 'PEDIDO_CONFIRMADO', { numero: pedido.numeroPedido })
+  }
+}
+
+/**
+ * Save da edição de um pedido ABERTO (só os itens mudam). Reserva apenas o
+ * acréscimo e libera o excedente, inclusive de itens removidos. Itens que já
+ * estavam no pedido mantêm o preço fixado; itens novos pegam o preço atual.
+ */
+export async function atualizarPedidoAberto(req, pedidoID) {
+  const pedido = req.data
+  const atual = await SELECT.one.from(db().Pedidos, pedidoID)
+  if (!atual) return erro(req, 404, 'PEDIDO_STATUS_INVALIDO', { status: '?' })
+  if (atual.statusPedido_code !== STATUS.aberto) return erro(req, 409, 'PEDIDO_EDICAO_BLOQUEADA')
+  if (pedido.cliente_ID && pedido.cliente_ID !== atual.cliente_ID) {
+    return erro(req, 409, 'PEDIDO_CLIENTE_IMUTAVEL', {}, 'cliente_ID')
+  }
+  for (const campo of CAMPOS_CONTROLADOS) delete pedido[campo]
+  if (!pedido.itens) return // só campos do cabeçalho (ex.: observação)
+
+  const itens = pedido.itens
+  if (!itens.length) return erro(req, 400, 'PEDIDO_SEM_ITENS')
+  const anterior = await reservaAtual(pedidoID)
+  const nova = somarQuantidades(itens)
+  const reservar = new Map()
+  const liberar = new Map()
+  for (const [ID, qtde] of nova) {
+    const antes = anterior.get(ID) ?? 0
+    if (qtde > antes) reservar.set(ID, qtde - antes)
+    else if (qtde < antes) liberar.set(ID, antes - qtde)
+  }
+  for (const [ID, antes] of anterior) if (!nova.has(ID)) liberar.set(ID, antes)
+
+  const estoque = await carregarItens([...nova.keys()])
+  // Item inativo só barra itens novos ou com quantidade maior
+  validarLinhas(req, itens, estoque, new Set(reservar.keys()))
+  for (const [ID, qtde] of reservar) {
+    const item = estoque.get(ID)
+    if (item && item.itemAtivo && qtde > item.qtdeEstoque - item.qtdeReservada) {
+      erro(req, 409, 'ITEM_ESTOQUE_INSUFICIENTE', { sku: item.sku, disponivel: item.qtdeEstoque - item.qtdeReservada })
+    }
+  }
+  if (req.errors) return
+
+  const precosFixados = new Map(
+    (await SELECT.from(db().ItensPedido).columns('item_ID', 'precoUnitarioSnapshot').where({ pedido_ID: pedidoID }))
+      .map(l => [l.item_ID, l.precoUnitarioSnapshot])
+  )
+  pedido.valorTotal = precificar(itens, estoque, precosFixados)
+  if (liberar.size && !(await movimentarEstoque(req, MOVIMENTO.liberar, liberar))) return
+  if (reservar.size && !(await movimentarEstoque(req, MOVIMENTO.reservar, reservar))) return
+  if (reservar.size || liberar.size) info(req, 'PEDIDO_ATUALIZADO', { numero: atual.numeroPedido })
+}
+
+function validarLinhas(req, itens, estoque, idsQueReservam) {
+  for (const linha of itens) {
+    const item = estoque.get(linha.item_ID)
+    if (!linha.item_ID) erro(req, 400, 'CAMPO_OBRIGATORIO', { campo: 'Item' })
+    else if ((!item || !item.itemAtivo) && idsQueReservam.has(linha.item_ID)) {
+      erro(req, 409, 'ITEM_INATIVO', { sku: item?.sku ?? '?' })
+    } else if (!(Number(linha.qtdeItemPedido) > 0)) erro(req, 400, 'ITEM_QTDE_INVALIDA')
+    else if (item && item.currency_code !== MOEDA_PADRAO) erro(req, 400, 'VALOR_INVALIDO', { campo: 'Moeda do item' })
+  }
+}
+
+/** Fixa preço, moeda e total de cada linha; devolve o total do pedido. */
+function precificar(itens, estoque, precosFixados) {
+  let total = 0
+  for (const linha of itens) {
+    const preco = precosFixados.get(linha.item_ID) ?? estoque.get(linha.item_ID)?.precoUnitario ?? 0
+    linha.precoUnitarioSnapshot = preco
+    linha.currency_code = MOEDA_PADRAO
+    linha.valorTotal = arredondar(Number(linha.qtdeItemPedido) * Number(preco))
+    total += linha.valorTotal
+  }
+  return arredondar(total)
+}
+
+/**
+ * Snapshots imutáveis do cliente/endereço e dos itens (uma única vez).
+ * @param {'FINALIZACAO'|'CANCELAMENTO'} motivo
+ */
+export async function criarSnapshots(req, pedido, motivo) {
+  const { PedidosClienteSnapshots, PedidosItensSnapshots, Clientes, Enderecos, Itens, ItensPedido } = db()
+  const existente = await SELECT.one.from(PedidosClienteSnapshots).columns('ID').where({ pedido_ID: pedido.ID })
+  if (existente) {
+    info(req, 'SNAPSHOT_EXISTENTE')
+    return
+  }
+  const cliente = await SELECT.one.from(Clientes, pedido.cliente_ID)
+    .columns('cpf', 'nome', 'email', 'telefone', 'genero_code', 'dataNascimento', 'clienteAtivo', 'scoreCliente')
+  const endereco = pedido.endereco_ID
+    ? await SELECT.one.from(Enderecos, pedido.endereco_ID)
+      .columns('ID', 'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'uf', 'estado')
+    : null
+  await INSERT.into(PedidosClienteSnapshots).entries({
+    pedido_ID: pedido.ID,
+    cliente_ID: pedido.cliente_ID,
+    ...cliente,
+    endereco_ID: endereco?.ID,
+    cep: endereco?.cep,
+    logradouro: endereco?.logradouro,
+    numero: endereco?.numero,
+    complemento: endereco?.complemento,
+    bairro: endereco?.bairro,
+    cidade: endereco?.cidade,
+    uf: endereco?.uf,
+    estado: endereco?.estado,
+    enderecoCompleto: pedido.enderecoPrincipalCompleto,
+    motivoSnapshot: motivo
+  })
+
+  const linhas = await SELECT.from(ItensPedido)
+    .columns('ID', 'item_ID', 'qtdeItemPedido', 'currency_code', 'precoUnitarioSnapshot', 'valorTotal')
+    .where({ pedido_ID: pedido.ID })
+  if (!linhas.length) return
+  const mestres = new Map(
+    (await SELECT.from(Itens).columns('ID', 'sku', 'nome', 'descricao', 'categoria_code')
+      .where({ ID: { in: linhas.map(l => l.item_ID) } })).map(i => [i.ID, i])
+  )
+  await INSERT.into(PedidosItensSnapshots).entries(linhas.map(l => {
+    const m = mestres.get(l.item_ID) ?? {}
+    return {
+      pedido_ID: pedido.ID,
+      itemPedido_ID: l.ID,
+      item_ID: l.item_ID,
+      sku: m.sku,
+      nome: m.nome,
+      descricao: m.descricao,
+      categoria_code: m.categoria_code,
+      quantidade: l.qtdeItemPedido,
+      currency_code: l.currency_code,
+      precoUnitario: l.precoUnitarioSnapshot,
+      valorTotal: l.valorTotal
+    }
+  }))
+}
+
+/** Lê o pedido ativo (sem rascunho em andamento) para as ações do ciclo de vida. */
+export async function lerPedidoParaAcao(req, pedidoID) {
+  const pedido = await SELECT.one.from(db().Pedidos, pedidoID)
+  if (!pedido) {
+    erro(req, 404, 'PEDIDO_STATUS_INVALIDO', { status: '?' })
+    return null
+  }
+  const emEdicao = cds.model.definitions['PedidosService.Pedidos.drafts']
+  if (emEdicao && (await SELECT.one.from(emEdicao).columns('ID').where({ ID: pedidoID }))) {
+    erro(req, 409, 'PEDIDO_EM_EDICAO', { numero: pedido.numeroPedido })
+    return null
+  }
+  return pedido
+}
+
+/** Libera toda a reserva do pedido. */
+export async function liberarReservaDoPedido(req, pedidoID) {
+  return movimentarEstoque(req, MOVIMENTO.liberar, await reservaAtual(pedidoID))
+}
+
+/**
+ * Cancelamento (action cancelarPedido). Com pagamento aprovado abre a
+ * solicitação de reembolso em vez de cancelar direto (estoque segue reservado).
+ */
+export async function cancelarPedido(req, pedido, motivo) {
+  if (pedido.statusPedido_code !== STATUS.aberto && pedido.statusPedido_code !== STATUS.aguardandoAprovacao) {
+    return erroStatus(req, pedido)
+  }
+  const motivoLimpo = String(motivo ?? '').trim()
+  if (!motivoLimpo) return erro(req, 400, 'PEDIDO_MOTIVO_CANCEL_OBRIG', {}, 'motivoCancelamento')
+
+  if (pedido.statusPagamento_code === STATUS_PAGAMENTO.aprovado) {
+    return iniciarReembolso(req, pedido, motivoLimpo)
+  }
+  if (!(await liberarReservaDoPedido(req, pedido.ID))) return
+  await criarSnapshots(req, pedido, 'CANCELAMENTO')
+  await UPDATE(db().Pedidos, pedido.ID).with({
+    statusPedido_code: STATUS.cancelado,
+    motivoCancelamento: motivoLimpo,
+    dataCancelamento: new Date().toISOString(),
+    canceladoPor: req.user.id
+  })
+  info(req, 'PEDIDO_CANCELADO', { numero: pedido.numeroPedido })
+}
+
+async function iniciarReembolso(req, pedido, motivo) {
+  await INSERT.into(db().Reembolsos).entries({
+    pedido_ID: pedido.ID,
+    numeroPedido: pedido.numeroPedido,
+    cliente_ID: pedido.cliente_ID,
+    statusReembolso_code: 'PENDENTE',
+    statusPedidoAnterior_code: pedido.statusPedido_code,
+    currency_code: pedido.currency_code,
+    valorReembolso: pedido.valorTotal,
+    motivoSolicitacao: motivo,
+    dataSolicitacao: new Date().toISOString(),
+    solicitadoPor: req.user.id
+  })
+  await UPDATE(db().Pedidos, pedido.ID).with({
+    statusPedido_code: STATUS.processandoReembolso,
+    motivoCancelamento: motivo
+  })
+  info(req, 'PEDIDO_REEMBOLSO_SOLICITADO', { numero: pedido.numeroPedido })
+}
+
+/**
+ * Reembolso aprovado: libera a reserva, gera os snapshots, cancela o pedido e
+ * devolve o pagamento (pedido e registro de pagamento).
+ */
+export async function cancelarPorReembolso(req, pedidoID) {
+  const pedido = await SELECT.one.from(db().Pedidos, pedidoID)
+  if (!pedido || pedido.statusPedido_code !== STATUS.processandoReembolso) {
+    return erroStatus(req, pedido ?? { statusPedido_code: '?' })
+  }
+  if (!(await liberarReservaDoPedido(req, pedidoID))) return
+  await criarSnapshots(req, pedido, 'CANCELAMENTO')
+  await UPDATE(db().Pedidos, pedidoID).with({
+    statusPedido_code: STATUS.cancelado,
+    statusPagamento_code: STATUS_PAGAMENTO.devolvido,
+    dataCancelamento: new Date().toISOString(),
+    canceladoPor: req.user.id
+  })
+  await UPDATE(db().Pagamentos).with({ statusPagamento_code: STATUS_PAGAMENTO.devolvido }).where({ pedido_ID: pedidoID })
+  return pedido
+}
+
+/** Reembolso rejeitado: o pedido volta ao status anterior e o motivo é limpo. */
+export async function retomarPedido(req, pedidoID, statusAnterior) {
+  const pedido = await SELECT.one.from(db().Pedidos, pedidoID)
+  if (!pedido || pedido.statusPedido_code !== STATUS.processandoReembolso) {
+    return erroStatus(req, pedido ?? { statusPedido_code: '?' })
+  }
+  if (!statusAnterior) return erro(req, 400, 'CAMPO_OBRIGATORIO', { campo: 'Status anterior' })
+  await UPDATE(db().Pedidos, pedidoID).with({ statusPedido_code: statusAnterior, motivoCancelamento: null })
+  return pedido
+}
+
+/** Grava o resultado seguro do pagamento (somente a última tentativa). */
+export async function gravarPagamento(pedidoID, resultado) {
+  const { Pagamentos } = db()
+  await DELETE.from(Pagamentos).where({ pedido_ID: pedidoID })
+  await INSERT.into(Pagamentos).entries({
+    pedido_ID: pedidoID,
+    metodoPagamento_code: resultado.metodo,
+    statusPagamento_code: resultado.status,
+    bandeiraCartao: resultado.bandeira,
+    ultimos4DigitosCartao: resultado.ultimos4,
+    cartaoMascarado: resultado.cartaoMascarado,
+    codigoAutorizacao: resultado.codigoAutorizacao,
+    mensagemPagamento: resultado.mensagem,
+    dataPagamento: new Date().toISOString()
+  })
+}
