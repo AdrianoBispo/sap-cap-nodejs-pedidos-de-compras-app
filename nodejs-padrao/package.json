@@ -22,11 +22,7 @@
     "watch": "cds watch",
     "test": "CDS_PLUGIN_UI5_ACTIVE=false node --test --test-concurrency=1 \"test/**/*.test.js\"",
     "lint": "eslint .",
-    "dados:demo": "node scripts/gerar-dados-demo.js",
-    "watch-gestao-clientes": "cds watch --open gestaoclientes/index.html?sap-ui-xx-viewCache=false --livereload false",
-    "watch-gestao-estoque": "cds watch --open gestaoestoque/index.html?sap-ui-xx-viewCache=false --livereload false",
-    "watch-pedidos-compras": "cds watch --open pedidoscompras/index.html?sap-ui-xx-viewCache=false --livereload false",
-    "watch-gestao-reembolsos": "cds watch --open gestaoreembolsos/index.html?sap-ui-xx-viewCache=false --livereload false"
+    "dados:demo": "node scripts/gerar-dados-demo.js"
   },
   "cds": {
     "i18n": {
@@ -66,9 +62,10 @@
     "app/*"
   ],
   "sapux": [
+    "app/analise-compras",
     "app/gestao-clientes",
     "app/gestao-estoque",
-    "app/pedidos-compras",
-    "app/gestao-reembolsos"
+    "app/gestao-reembolsos",
+    "app/pedidos-compras"
   ]
 }

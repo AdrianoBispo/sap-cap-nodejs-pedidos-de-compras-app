@@ -1,0 +1,155 @@
+{
+  "_version": "2.0.0",
+  "sap.app": {
+    "id": "analisecompras",
+    "type": "application",
+    "i18n": {
+      "bundleUrl": "i18n/i18n.properties",
+      "supportedLocales": [
+        ""
+      ],
+      "fallbackLocale": ""
+    },
+    "applicationVersion": {
+      "version": "0.0.1"
+    },
+    "title": "{{appTitle}}",
+    "description": "{{appDescription}}",
+    "resources": "resources.json",
+    "dataSources": {
+      "mainService": {
+        "uri": "/odata/v4/analitico/",
+        "type": "OData",
+        "settings": {
+          "odataVersion": "4.0"
+        }
+      }
+    },
+    "crossNavigation": {
+      "inbounds": {
+        "AnaliseCompras-display": {
+          "semanticObject": "AnaliseCompras",
+          "action": "display",
+          "title": "{{flpTitle}}",
+          "subTitle": "{{flpSubtitle}}",
+          "icon": "sap-icon://business-objects-experience",
+          "signature": {
+            "parameters": {},
+            "additionalParameters": "allowed"
+          }
+        }
+      }
+    }
+  },
+  "sap.ui": {
+    "technology": "UI5",
+    "icons": {
+      "icon": "",
+      "favIcon": "",
+      "phone": "",
+      "phone@2": "",
+      "tablet": "",
+      "tablet@2": ""
+    },
+    "deviceTypes": {
+      "desktop": true,
+      "tablet": true,
+      "phone": true
+    },
+    "fullWidth": true
+  },
+  "sap.ui5": {
+    "flexEnabled": false,
+    "rootView": {
+      "viewName": "analisecompras.view.App",
+      "type": "XML",
+      "id": "App"
+    },
+    "dependencies": {
+      "minUI5Version": "1.136.0",
+      "libs": {
+        "sap.m": {},
+        "sap.f": {},
+        "sap.ui.core": {},
+        "sap.viz": {}
+      }
+    },
+    "contentDensities": {
+      "compact": true,
+      "cozy": true
+    },
+    "models": {
+      "i18n": {
+        "type": "sap.ui.model.resource.ResourceModel",
+        "settings": {
+          "bundleName": "analisecompras.i18n.i18n",
+          "supportedLocales": [
+            ""
+          ],
+          "fallbackLocale": ""
+        }
+      },
+      "": {
+        "dataSource": "mainService",
+        "preload": true,
+        "settings": {
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
+      }
+    },
+    "resources": {
+      "css": [
+        {
+          "uri": "css/style.css"
+        }
+      ]
+    },
+    "routing": {
+      "config": {
+        "routerClass": "sap.m.routing.Router",
+        "type": "View",
+        "viewType": "XML",
+        "path": "analisecompras.view",
+        "controlId": "app",
+        "controlAggregation": "pages",
+        "transition": "slide"
+      },
+      "routes": [
+        {
+          "name": "home",
+          "pattern": "",
+          "target": "dashboard"
+        },
+        {
+          "name": "dashboard",
+          "pattern": "painel/{domain}",
+          "target": "dashboard"
+        },
+        {
+          "name": "detail",
+          "pattern": "analise/{scenario}",
+          "target": "detail"
+        }
+      ],
+      "targets": {
+        "dashboard": {
+          "name": "Dashboard",
+          "id": "dashboard"
+        },
+        "detail": {
+          "name": "Detail",
+          "id": "detail"
+        }
+      }
+    },
+    "config": {
+      "fullWidth": true
+    }
+  },
+  "sap.fiori": {
+    "registrationIds": [],
+    "archeType": "analytical"
+  }
+}

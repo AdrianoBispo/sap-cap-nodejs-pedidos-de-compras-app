@@ -3,6 +3,7 @@
  * arquivo .xlsx ou .csv, envia o conteúdo (base64) para a action não
  * vinculada importarPlanilha do serviço e atualiza a lista.
  */
+/* global Promise */
 sap.ui.define([
     "sap/m/Button",
     "sap/m/Dialog",
@@ -37,9 +38,9 @@ sap.ui.define([
 
     return {
         abrir: function () {
-            const api = this;
-            const modelo = api.getModel();
-            const textos = api.getModel("i18n").getResourceBundle();
+            const that = this; // ExtensionAPI do List Report
+            const modelo = that.getModel();
+            const textos = that.getModel("i18n").getResourceBundle();
             let arquivo = null;
 
             const seletor = new FileUploader({
@@ -77,7 +78,7 @@ sap.ui.define([
                             const resultado = operacao.getBoundContext().getObject();
                             MessageToast.show(resultado.mensagem);
                             dialogo.close();
-                            api.refresh();
+                            that.refresh();
                         } catch (erro) {
                             MessageBox.error(textoDoErro(erro), { title: textos.getText("importarErro") });
                         } finally {
