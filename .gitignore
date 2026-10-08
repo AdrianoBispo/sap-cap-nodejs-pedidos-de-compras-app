@@ -1,0 +1,21 @@
+# Dependências e builds
+node_modules/
+gen/
+dist/
+mta_archives/
+*.mtar
+@cds-models/
+
+# Bancos SQLite locais
+*.sqlite
+*.sqlite-journal
+*.db
+
+# Ambiente / credenciais
+.env
+default-env.json
+.cdsrc-private.json
+*.log
+.DS_Store
+.vscode/
+coverage/
