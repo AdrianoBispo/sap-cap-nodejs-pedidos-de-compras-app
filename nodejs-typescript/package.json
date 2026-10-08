@@ -19,6 +19,7 @@
     "@types/node": "^24.0.0",
     "cds-plugin-ui5": "^0.17.0",
     "eslint": "^10.12.0",
+    "local-ssl-proxy": "^2.0.5",
     "tsx": "^4",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.71.1"
@@ -26,6 +27,7 @@
   "scripts": {
     "start": "cds-serve",
     "watch": "cds-tsx watch",
+    "https": "local-ssl-proxy --source 8443 --target 4004",
     "serve": "cds-tsx serve",
     "typer": "cds-typer \"*\" --outputDirectory @cds-models",
     "typecheck": "npm run typer && tsc --noEmit",
