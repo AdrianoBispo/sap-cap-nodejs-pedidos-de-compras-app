@@ -37,6 +37,8 @@ export default class ClientesService extends cds.ApplicationService {
       if (typeof d.email === 'string') d.email = d.email.trim().toLowerCase()
     }
     this.before('PATCH', Clientes.drafts, normalizar)
+    // Score é sorteado pelo backend: nunca vem da UI
+    this.before('PATCH', Clientes.drafts, req => { delete req.data.scoreCliente })
     this.before(['CREATE', 'UPDATE'], Clientes, normalizar)
 
     // Foto: JPEG, PNG ou WEBP (MIME, extensão e assinatura binária)
@@ -85,6 +87,8 @@ export default class ClientesService extends cds.ApplicationService {
 
     // CEP informado: preenche o endereço (side effects recarregam os campos)
     this.before('PATCH', Enderecos.drafts, async req => {
+      // Principal só muda pela ação; cidade/UF/estado e status do CEP só pelo ViaCEP
+      for (const campo of ['principal', 'cidade', 'uf', 'estado', 'cepGeral', 'cepStatus']) delete req.data[campo]
       if ('cep' in req.data) await preencherEnderecoPorCep(req, req.data)
     })
 

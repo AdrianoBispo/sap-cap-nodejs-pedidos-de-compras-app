@@ -20,7 +20,7 @@
   "scripts": {
     "start": "cds-serve",
     "watch": "cds watch",
-    "test": "node --test --test-concurrency=1 \"test/**/*.test.js\"",
+    "test": "CDS_PLUGIN_UI5_ACTIVE=false node --test --test-concurrency=1 \"test/**/*.test.js\"",
     "lint": "eslint .",
     "dados:demo": "node scripts/gerar-dados-demo.js",
     "watch-gestao-clientes": "cds watch --open gestaoclientes/index.html?sap-ui-xx-viewCache=false --livereload false",

@@ -11,7 +11,7 @@
  */
 import cds from '@sap/cds'
 import {
-  STATUS, STATUS_PAGAMENTO, MOEDA_PADRAO,
+  STATUS, STATUS_PAGAMENTO, MOEDA_PADRAO, CAMPOS_CONTROLADOS,
   enderecoPrincipal, reservaAtual, erroStatus, registrarPedido, atualizarPedidoAberto,
   lerPedidoParaAcao, criarSnapshots, cancelarPedido, gravarPagamento
 } from './lib/pedidos.js'
@@ -42,8 +42,10 @@ export default class PedidosService extends cds.ApplicationService {
       })
     })
 
-    // Troca de cliente: usa o endereço principal atual (side effect na UI)
+    // Troca de cliente: usa o endereço principal atual (side effect na UI).
+    // Status, número, totais e endereço são mantidos só pelo backend.
     this.before('PATCH', Pedidos.drafts, async req => {
+      for (const campo of CAMPOS_CONTROLADOS) delete req.data[campo]
       if (!('cliente_ID' in req.data)) return
       const rascunho = await SELECT.one.from(Pedidos.drafts, chave(req)).columns('numeroPedido')
       if (rascunho?.numeroPedido) return rejeitar(req, 409, 'PEDIDO_CLIENTE_IMUTAVEL', {}, 'cliente_ID')

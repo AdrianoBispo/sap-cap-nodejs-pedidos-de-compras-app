@@ -1,1 +1,508 @@
+/*
+ * UI da aplicação Pedidos de Compras (porte de ZC_PC_PEDIDO_APP.ddlx e das
+ * metadata extensions dos itens, pagamento e snapshots).
+ *
+ * Object Page dinâmica: Dados do Cliente e Itens existem em duas versões com
+ * o mesmo título; pedido FINALIZADO/CANCELADO mostra os snapshots, os demais
+ * status mostram os dados atuais. As seções Finalização e Cancelamento só
+ * aparecem no status correspondente. Os indicadores são elementos calculados
+ * (encerrado, naoEncerrado, naoFinalizado, naoCancelado).
+ */
 using PedidosService as service from '../../srv/pedidos-service';
+
+annotate service.Pedidos with @(
+  Common.SemanticKey              : [numeroPedido],
+  UI.HeaderInfo                   : {
+    TypeName      : 'Pedido de compra',
+    TypeNamePlural: 'Pedidos de compras',
+    Title         : {Value: numeroPedido},
+    Description   : {Value: nomeCliente}
+  },
+  UI.SelectionFields              : [
+    cliente_ID,
+    cpfCliente,
+    statusPedido_code,
+    statusPagamento_code,
+    createdAt,
+    valorTotal
+  ],
+  UI.LineItem                     : [
+    {
+      $Type  : 'UI.DataFieldForActionGroup',
+      ID     : 'AcoesPedido',
+      Label  : 'Ações',
+      Actions: [
+        {
+          $Type : 'UI.DataFieldForAction',
+          Action: 'PedidosService.efetuarPagamento',
+          Label : 'Efetuar Pagamento'
+        },
+        {
+          $Type : 'UI.DataFieldForAction',
+          Action: 'PedidosService.aprovarPedido',
+          Label : 'Aprovar pedido'
+        },
+        {
+          $Type : 'UI.DataFieldForAction',
+          Action: 'PedidosService.cancelarPedido',
+          Label : 'Cancelar pedido'
+        }
+      ]
+    },
+    {
+      Value            : numeroPedido,
+      ![@UI.Importance]: #High
+    },
+    {
+      Value: cpfClienteFormatado,
+      Label: 'CPF'
+    },
+    {
+      Value            : nomeCliente,
+      Label            : 'Cliente',
+      ![@UI.Importance]: #High
+    },
+    {
+      Value            : statusPedido_code,
+      Criticality      : statusPedido.criticality,
+      ![@UI.Importance]: #High
+    },
+    {
+      Value      : statusPagamento_code,
+      Criticality: statusPagamento.criticality
+    },
+    {
+      Value            : valorTotal,
+      Label            : 'Total',
+      ![@UI.Importance]: #High
+    },
+    {Value: createdAt},
+    {Value: dataFinalizacao}
+  ],
+  UI.PresentationVariant          : {
+    SortOrder     : [{
+      Property  : createdAt,
+      Descending: true
+    }],
+    Visualizations: ['@UI.LineItem']
+  },
+  UI.Identification               : [{
+    $Type  : 'UI.DataFieldForActionGroup',
+    ID     : 'AcoesPedidoOP',
+    Label  : 'Ações',
+    Actions: [
+      {
+        $Type : 'UI.DataFieldForAction',
+        Action: 'PedidosService.efetuarPagamento',
+        Label : 'Efetuar Pagamento'
+      },
+      {
+        $Type : 'UI.DataFieldForAction',
+        Action: 'PedidosService.aprovarPedido',
+        Label : 'Aprovar pedido'
+      },
+      {
+        $Type : 'UI.DataFieldForAction',
+        Action: 'PedidosService.cancelarPedido',
+        Label : 'Cancelar pedido'
+      }
+    ]
+  }],
+  // Editar só no status ABERTO (apenas os itens); o pedido registrado não é excluído
+  UI.UpdateHidden                 : (statusPedido.code <> 'ABERTO'),
+  UI.DeleteHidden                 : true,
+  UI.HeaderFacets                 : [
+    {
+      $Type : 'UI.ReferenceFacet',
+      ID    : 'HeaderStatus',
+      Target: '@UI.DataPoint#StatusPedido'
+    },
+    {
+      $Type : 'UI.ReferenceFacet',
+      ID    : 'HeaderPagamento',
+      Target: '@UI.DataPoint#StatusPagamento'
+    },
+    {
+      $Type : 'UI.ReferenceFacet',
+      ID    : 'HeaderTotal',
+      Target: '@UI.DataPoint#ValorTotal'
+    }
+  ],
+  UI.DataPoint #StatusPedido      : {
+    Value      : statusPedido_code,
+    Title      : 'Status do pedido',
+    Criticality: statusPedido.criticality
+  },
+  UI.DataPoint #StatusPagamento   : {
+    Value      : statusPagamento_code,
+    Title      : 'Pagamento',
+    Criticality: statusPagamento.criticality
+  },
+  UI.DataPoint #ValorTotal        : {
+    Value: valorTotal,
+    Title: 'Valor total'
+  },
+  UI.Facets                       : [
+    {
+      $Type        : 'UI.ReferenceFacet',
+      ID           : 'DadosCliente',
+      Label        : 'Dados do Cliente',
+      Target       : '@UI.FieldGroup#Cliente',
+      ![@UI.Hidden]: encerrado
+    },
+    {
+      $Type        : 'UI.ReferenceFacet',
+      ID           : 'DadosClienteSnap',
+      Label        : 'Dados do Cliente',
+      Target       : 'clienteSnapshot/@UI.FieldGroup#Snapshot',
+      ![@UI.Hidden]: naoEncerrado
+    },
+    {
+      $Type : 'UI.ReferenceFacet',
+      ID    : 'DadosPedido',
+      Label : 'Dados do Pedido',
+      Target: '@UI.FieldGroup#Pedido'
+    },
+    {
+      $Type        : 'UI.ReferenceFacet',
+      ID           : 'Itens',
+      Label        : 'Itens',
+      Target       : 'itens/@UI.LineItem',
+      ![@UI.Hidden]: encerrado
+    },
+    {
+      $Type        : 'UI.ReferenceFacet',
+      ID           : 'ItensSnap',
+      Label        : 'Itens',
+      Target       : 'itensSnapshot/@UI.LineItem',
+      ![@UI.Hidden]: naoEncerrado
+    },
+    {
+      $Type : 'UI.ReferenceFacet',
+      ID    : 'Pagamento',
+      Label : 'Pagamento (última tentativa)',
+      Target: 'pagamento/@UI.FieldGroup#Pagamento'
+    },
+    {
+      $Type        : 'UI.ReferenceFacet',
+      ID           : 'Finalizacao',
+      Label        : 'Finalização',
+      Target       : '@UI.FieldGroup#Finalizacao',
+      ![@UI.Hidden]: naoFinalizado
+    },
+    {
+      $Type        : 'UI.ReferenceFacet',
+      ID           : 'Cancelamento',
+      Label        : 'Cancelamento',
+      Target       : '@UI.FieldGroup#Cancelamento',
+      ![@UI.Hidden]: naoCancelado
+    }
+  ],
+  UI.FieldGroup #Cliente          : {Data: [
+    {Value: cliente_ID},
+    {
+      Value: cpfClienteFormatado,
+      Label: 'CPF'
+    },
+    {
+      Value: emailCliente,
+      Label: 'E-mail'
+    },
+    {
+      Value: telefoneCliente,
+      Label: 'Telefone'
+    },
+    {
+      Value: generoCliente,
+      Label: 'Gênero'
+    },
+    {
+      Value: dataNascimentoCliente,
+      Label: 'Data de nascimento'
+    },
+    {Value: enderecoPrincipalCompleto}
+  ]},
+  UI.FieldGroup #Pedido           : {Data: [
+    {Value: numeroPedido},
+    {
+      Value      : statusPedido_code,
+      Criticality: statusPedido.criticality
+    },
+    {
+      Value      : statusPagamento_code,
+      Criticality: statusPagamento.criticality
+    },
+    {Value: observacao},
+    {Value: valorTotal},
+    {Value: createdAt},
+    {Value: createdBy},
+    {Value: modifiedAt},
+    {Value: modifiedBy}
+  ]},
+  UI.FieldGroup #Finalizacao      : {Data: [{Value: dataFinalizacao}]},
+  UI.FieldGroup #Cancelamento     : {Data: [
+    {Value: motivoCancelamento},
+    {Value: dataCancelamento},
+    {Value: canceladoPor}
+  ]},
+  // Troca de cliente: o backend usa o endereço principal atual
+  Common.SideEffects #Cliente     : {
+    SourceProperties: [cliente_ID],
+    TargetProperties: [
+      'endereco_ID',
+      'enderecoPrincipalCompleto',
+      'nomeCliente',
+      'cpfClienteFormatado',
+      'emailCliente',
+      'telefoneCliente',
+      'generoCliente',
+      'dataNascimentoCliente'
+    ]
+  }
+) {
+  // O cliente é escolhido na criação (obrigatório); depois do registro fica somente leitura
+  cliente               @Common.FieldControl: (case when numeroPedido is null then 7 else 1 end)  @Common: {
+    Text           : nomeCliente,
+    TextArrangement: #TextOnly,
+    SemanticObject : 'Cliente',
+    ValueList      : {
+      Label         : 'Clientes ativos',
+      CollectionPath: 'ClientesAtivos',
+      Parameters    : [
+        {
+          $Type            : 'Common.ValueListParameterInOut',
+          LocalDataProperty: cliente_ID,
+          ValueListProperty: 'ID'
+        },
+        {
+          $Type            : 'Common.ValueListParameterDisplayOnly',
+          ValueListProperty: 'cpfFormatado'
+        },
+        {
+          $Type            : 'Common.ValueListParameterDisplayOnly',
+          ValueListProperty: 'nome'
+        },
+        {
+          $Type            : 'Common.ValueListParameterDisplayOnly',
+          ValueListProperty: 'email'
+        },
+        {
+          $Type            : 'Common.ValueListParameterDisplayOnly',
+          ValueListProperty: 'cidade'
+        },
+        {
+          $Type            : 'Common.ValueListParameterDisplayOnly',
+          ValueListProperty: 'uf'
+        }
+      ]
+    }
+  };
+  endereco              @Common: {
+    Text           : enderecoPrincipalCompleto,
+    TextArrangement: #TextOnly
+  };
+  statusPedido          @Common.ValueListWithFixedValues;
+  statusPagamento       @Common.ValueListWithFixedValues;
+  nomeCliente           @title: 'Cliente'  @Common.SemanticObject: 'Cliente';
+  cpfCliente            @title: 'CPF';
+  cpfClienteFormatado   @title: 'CPF';
+  emailCliente          @title: 'E-mail';
+  telefoneCliente       @title: 'Telefone';
+  generoCliente         @title: 'Gênero';
+  dataNascimentoCliente @title: 'Data de nascimento';
+};
+
+annotate service.Pedidos actions {
+  efetuarPagamento @(
+    Common.IsActionCritical: false
+  )(
+    metodoPagamento @title: 'Método de pagamento' @Common: {
+      ValueListWithFixedValues: true,
+      ValueList               : {
+        CollectionPath: 'MetodosPagamento',
+        Parameters    : [{
+          $Type            : 'Common.ValueListParameterInOut',
+          LocalDataProperty: metodoPagamento,
+          ValueListProperty: 'code'
+        }]
+      }
+    },
+    numeroCartao    @title: 'Número do cartão',
+    validade        @title: 'Validade (MM/AA)',
+    cvv             @title: 'CVV'
+  );
+  aprovarPedido    @Common.IsActionCritical;
+  cancelarPedido(
+    motivoCancelamento @title: 'Motivo do cancelamento'  @UI.MultiLineText
+  );
+};
+
+annotate service.ItensPedido with @(
+  UI.HeaderInfo         : {
+    TypeName      : 'Item do pedido',
+    TypeNamePlural: 'Itens do pedido',
+    Title         : {Value: item.nome},
+    Description   : {Value: item.sku}
+  },
+  UI.LineItem           : [
+    {
+      Value            : item_ID,
+      ![@UI.Importance]: #High
+    },
+    {
+      Value: item.sku,
+      Label: 'SKU'
+    },
+    {
+      Value: item.qtdeDisponivel,
+      Label: 'Disponível agora'
+    },
+    {
+      Value            : qtdeItemPedido,
+      ![@UI.Importance]: #High
+    },
+    {Value: precoUnitarioSnapshot},
+    {
+      Value            : valorTotal,
+      ![@UI.Importance]: #High
+    }
+  ],
+  UI.Facets             : [{
+    $Type : 'UI.ReferenceFacet',
+    ID    : 'DadosItem',
+    Label : 'Item',
+    Target: '@UI.FieldGroup#Item'
+  }],
+  UI.FieldGroup #Item   : {Data: [
+    {Value: item_ID},
+    {
+      Value: item.sku,
+      Label: 'SKU'
+    },
+    {
+      Value: item.qtdeDisponivel,
+      Label: 'Qtde disponível agora (informativo)'
+    },
+    {Value: qtdeItemPedido},
+    {Value: precoUnitarioSnapshot},
+    {Value: valorTotal},
+    {Value: observacao}
+  ]},
+  // Item/quantidade alterados: preço, total da linha e total do pedido
+  Common.SideEffects #Valores: {
+    SourceProperties: [
+      item_ID,
+      qtdeItemPedido
+    ],
+    TargetProperties: [
+      'precoUnitarioSnapshot',
+      'valorTotal',
+      'currency_code',
+      'pedido/valorTotal'
+    ]
+  }
+) {
+  item @Common: {
+    Text           : item.nome,
+    TextArrangement: #TextOnly,
+    SemanticObject : 'ItemEstoque',
+    ValueList      : {
+      Label         : 'Itens ativos',
+      CollectionPath: 'ItensAtivos',
+      Parameters    : [
+        {
+          $Type            : 'Common.ValueListParameterInOut',
+          LocalDataProperty: item_ID,
+          ValueListProperty: 'ID'
+        },
+        {
+          $Type            : 'Common.ValueListParameterDisplayOnly',
+          ValueListProperty: 'sku'
+        },
+        {
+          $Type            : 'Common.ValueListParameterDisplayOnly',
+          ValueListProperty: 'nome'
+        },
+        {
+          $Type            : 'Common.ValueListParameterDisplayOnly',
+          ValueListProperty: 'precoUnitario'
+        },
+        {
+          $Type            : 'Common.ValueListParameterDisplayOnly',
+          ValueListProperty: 'qtdeDisponivel'
+        },
+        {
+          $Type            : 'Common.ValueListParameterDisplayOnly',
+          ValueListProperty: 'statusEstoque_code'
+        }
+      ]
+    }
+  };
+};
+
+annotate service.Pagamentos with @(UI.FieldGroup #Pagamento: {Data: [
+  {Value: metodoPagamento_code},
+  {
+    Value      : statusPagamento_code,
+    Criticality: statusPagamento.criticality
+  },
+  {Value: bandeiraCartao},
+  {Value: cartaoMascarado},
+  {Value: codigoAutorizacao},
+  {Value: mensagemPagamento},
+  {Value: dataPagamento}
+]});
+
+annotate service.PedidosClienteSnapshots with @(UI.FieldGroup #Snapshot: {Data: [
+  {Value: nome},
+  {Value: cpfFormatado},
+  {Value: email},
+  {Value: telefoneFormatado},
+  {Value: genero_code},
+  {Value: dataNascimento},
+  {Value: enderecoCompleto},
+  {Value: createdAt}
+]});
+
+annotate service.PedidosItensSnapshots with @(
+  UI.HeaderInfo: {
+    TypeName      : 'Item do pedido (histórico)',
+    TypeNamePlural: 'Itens do pedido',
+    Title         : {Value: nome},
+    Description   : {Value: sku}
+  },
+  UI.LineItem  : [
+    {
+      Value            : nome,
+      ![@UI.Importance]: #High
+    },
+    {Value: sku},
+    {
+      Value            : quantidade,
+      ![@UI.Importance]: #High
+    },
+    {Value: precoUnitario},
+    {
+      Value            : valorTotal,
+      ![@UI.Importance]: #High
+    }
+  ]
+);
+
+annotate service.ClientesAtivos with {
+  ID           @title: 'Cliente'  @Common.Text: nome  @Common.TextArrangement: #TextOnly;
+  cpfFormatado @title: 'CPF';
+  nome         @title: 'Nome';
+  email        @title: 'E-mail';
+  cidade       @title: 'Cidade';
+  uf           @title: 'UF';
+};
+
+annotate service.ItensAtivos with {
+  ID                 @title: 'Item'  @Common.Text: nome  @Common.TextArrangement: #TextOnly;
+  sku                @title: 'SKU';
+  nome               @title: 'Item';
+  precoUnitario      @title: 'Preço unitário';
+  qtdeDisponivel     @title: 'Qtde disponível';
+  statusEstoque_code @title: 'Status do estoque';
+};
