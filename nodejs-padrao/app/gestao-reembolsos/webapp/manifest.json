@@ -1,9 +1,15 @@
 {
-  "_version": "1.86.0",
+  "_version": "2.0.0",
   "sap.app": {
     "id": "gestaoreembolsos",
     "type": "application",
-    "i18n": "i18n/i18n.properties",
+    "i18n": {
+      "bundleUrl": "i18n/i18n.properties",
+      "supportedLocales": [
+        ""
+      ],
+      "fallbackLocale": ""
+    },
     "applicationVersion": {
       "version": "0.0.1"
     },
@@ -22,6 +28,21 @@
         "settings": {
           "annotations": [],
           "odataVersion": "4.0"
+        }
+      }
+    },
+    "crossNavigation": {
+      "inbounds": {
+        "Reembolso-manage": {
+          "semanticObject": "Reembolso",
+          "action": "manage",
+          "title": "{{appTitle}}",
+          "subTitle": "{{appDescription}}",
+          "icon": "sap-icon://money-bills",
+          "signature": {
+            "parameters": {},
+            "additionalParameters": "allowed"
+          }
         }
       }
     }
@@ -60,7 +81,11 @@
       "i18n": {
         "type": "sap.ui.model.resource.ResourceModel",
         "settings": {
-          "bundleName": "gestaoreembolsos.i18n.i18n"
+          "bundleName": "gestaoreembolsos.i18n.i18n",
+          "supportedLocales": [
+            ""
+          ],
+          "fallbackLocale": ""
         }
       },
       "": {
@@ -74,7 +99,13 @@
       },
       "@i18n": {
         "type": "sap.ui.model.resource.ResourceModel",
-        "uri": "i18n/i18n.properties"
+        "uri": "i18n/i18n.properties",
+        "settings": {
+          "supportedLocales": [
+            ""
+          ],
+          "fallbackLocale": ""
+        }
       }
     },
     "resources": {
@@ -116,7 +147,8 @@
                     "type": "ResponsiveTable"
                   }
                 }
-              }
+              },
+              "initialLoad": "Enabled"
             }
           }
         },
@@ -127,7 +159,9 @@
           "options": {
             "settings": {
               "editableHeaderContent": false,
-              "contextPath": "/Reembolsos"
+              "contextPath": "/Reembolsos",
+              "navigation": {},
+              "controlConfiguration": {}
             }
           }
         }

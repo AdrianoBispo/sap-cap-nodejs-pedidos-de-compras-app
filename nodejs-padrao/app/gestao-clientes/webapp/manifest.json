@@ -1,9 +1,15 @@
 {
-  "_version": "1.86.0",
+  "_version": "2.0.0",
   "sap.app": {
     "id": "gestaoclientes",
     "type": "application",
-    "i18n": "i18n/i18n.properties",
+    "i18n": {
+      "bundleUrl": "i18n/i18n.properties",
+      "supportedLocales": [
+        ""
+      ],
+      "fallbackLocale": ""
+    },
     "applicationVersion": {
       "version": "0.0.1"
     },
@@ -22,6 +28,21 @@
         "settings": {
           "annotations": [],
           "odataVersion": "4.0"
+        }
+      }
+    },
+    "crossNavigation": {
+      "inbounds": {
+        "Cliente-manage": {
+          "semanticObject": "Cliente",
+          "action": "manage",
+          "title": "{{appTitle}}",
+          "subTitle": "{{appDescription}}",
+          "icon": "sap-icon://customer",
+          "signature": {
+            "parameters": {},
+            "additionalParameters": "allowed"
+          }
         }
       }
     }
@@ -49,7 +70,8 @@
       "libs": {
         "sap.m": {},
         "sap.ui.core": {},
-        "sap.fe.templates": {}
+        "sap.fe.templates": {},
+        "sap.ui.unified": {}
       }
     },
     "contentDensities": {
@@ -60,7 +82,11 @@
       "i18n": {
         "type": "sap.ui.model.resource.ResourceModel",
         "settings": {
-          "bundleName": "gestaoclientes.i18n.i18n"
+          "bundleName": "gestaoclientes.i18n.i18n",
+          "supportedLocales": [
+            ""
+          ],
+          "fallbackLocale": ""
         }
       },
       "": {
@@ -74,7 +100,13 @@
       },
       "@i18n": {
         "type": "sap.ui.model.resource.ResourceModel",
-        "uri": "i18n/i18n.properties"
+        "uri": "i18n/i18n.properties",
+        "settings": {
+          "supportedLocales": [
+            ""
+          ],
+          "fallbackLocale": ""
+        }
       }
     },
     "resources": {
@@ -92,6 +124,11 @@
           "pattern": "Clientes({key}):?query:",
           "name": "ClientesObjectPage",
           "target": "ClientesObjectPage"
+        },
+        {
+          "pattern": "Clientes({key})/enderecos({key2}):?query:",
+          "name": "EnderecosObjectPage",
+          "target": "EnderecosObjectPage"
         }
       ],
       "targets": {
@@ -114,9 +151,19 @@
                 "@com.sap.vocabularies.UI.v1.LineItem": {
                   "tableSettings": {
                     "type": "ResponsiveTable"
+                  },
+                  "actions": {
+                    "importarPlanilha": {
+                      "press": "gestaoclientes.ext.ImportarPlanilha.abrir",
+                      "visible": true,
+                      "enabled": true,
+                      "requiresSelection": false,
+                      "text": "{i18n>importarPlanilha}"
+                    }
                   }
                 }
-              }
+              },
+              "initialLoad": "Enabled"
             }
           }
         },
@@ -127,7 +174,35 @@
           "options": {
             "settings": {
               "editableHeaderContent": false,
-              "contextPath": "/Clientes"
+              "contextPath": "/Clientes",
+              "navigation": {
+                "enderecos": {
+                  "detail": {
+                    "route": "EnderecosObjectPage"
+                  }
+                }
+              },
+              "controlConfiguration": {
+                "enderecos/@com.sap.vocabularies.UI.v1.LineItem": {
+                  "tableSettings": {
+                    "type": "ResponsiveTable",
+                    "creationMode": {
+                      "name": "NewPage"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "EnderecosObjectPage": {
+          "type": "Component",
+          "id": "EnderecosObjectPage",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "editableHeaderContent": false,
+              "contextPath": "/Clientes/enderecos"
             }
           }
         }

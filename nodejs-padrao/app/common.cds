@@ -225,3 +225,26 @@ annotate db.Reembolsos with {
 annotate Currencies with {
   code @title: 'Moeda';
 };
+
+// ---------------------------------------------------------------------------
+// Textos das CodeLists nas associações (a UI mostra a descrição, não o código)
+// ---------------------------------------------------------------------------
+
+annotate db.Pedidos with {
+  statusPedido    @Common.Text: statusPedido.name     @Common.TextArrangement: #TextOnly;
+  statusPagamento @Common.Text: statusPagamento.name  @Common.TextArrangement: #TextOnly;
+};
+
+annotate db.Pagamentos with {
+  metodoPagamento @Common.Text: metodoPagamento.name  @Common.TextArrangement: #TextOnly;
+  statusPagamento @Common.Text: statusPagamento.name  @Common.TextArrangement: #TextOnly;
+};
+
+annotate db.Reembolsos with {
+  statusReembolso      @Common.Text: statusReembolso.name       @Common.TextArrangement: #TextOnly;
+  statusPedidoAnterior @Common.Text: statusPedidoAnterior.name  @Common.TextArrangement: #TextOnly;
+};
+
+annotate db.PedidosItensSnapshots with {
+  categoria @Common.Text: categoria.name  @Common.TextArrangement: #TextOnly;
+};

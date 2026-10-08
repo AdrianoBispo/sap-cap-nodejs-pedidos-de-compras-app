@@ -1,9 +1,15 @@
 {
-  "_version": "1.86.0",
+  "_version": "2.0.0",
   "sap.app": {
     "id": "pedidoscompras",
     "type": "application",
-    "i18n": "i18n/i18n.properties",
+    "i18n": {
+      "bundleUrl": "i18n/i18n.properties",
+      "supportedLocales": [
+        ""
+      ],
+      "fallbackLocale": ""
+    },
     "applicationVersion": {
       "version": "0.0.1"
     },
@@ -22,6 +28,21 @@
         "settings": {
           "annotations": [],
           "odataVersion": "4.0"
+        }
+      }
+    },
+    "crossNavigation": {
+      "inbounds": {
+        "PedidoCompra-manage": {
+          "semanticObject": "PedidoCompra",
+          "action": "manage",
+          "title": "{{appTitle}}",
+          "subTitle": "{{appDescription}}",
+          "icon": "sap-icon://sales-order",
+          "signature": {
+            "parameters": {},
+            "additionalParameters": "allowed"
+          }
         }
       }
     }
@@ -49,7 +70,8 @@
       "libs": {
         "sap.m": {},
         "sap.ui.core": {},
-        "sap.fe.templates": {}
+        "sap.fe.templates": {},
+        "sap.ui.unified": {}
       }
     },
     "contentDensities": {
@@ -60,7 +82,11 @@
       "i18n": {
         "type": "sap.ui.model.resource.ResourceModel",
         "settings": {
-          "bundleName": "pedidoscompras.i18n.i18n"
+          "bundleName": "pedidoscompras.i18n.i18n",
+          "supportedLocales": [
+            ""
+          ],
+          "fallbackLocale": ""
         }
       },
       "": {
@@ -74,7 +100,13 @@
       },
       "@i18n": {
         "type": "sap.ui.model.resource.ResourceModel",
-        "uri": "i18n/i18n.properties"
+        "uri": "i18n/i18n.properties",
+        "settings": {
+          "supportedLocales": [
+            ""
+          ],
+          "fallbackLocale": ""
+        }
       }
     },
     "resources": {
@@ -92,6 +124,16 @@
           "pattern": "Pedidos({key}):?query:",
           "name": "PedidosObjectPage",
           "target": "PedidosObjectPage"
+        },
+        {
+          "pattern": "Pedidos({key})/itens({key2}):?query:",
+          "name": "ItensPedidoObjectPage",
+          "target": "ItensPedidoObjectPage"
+        },
+        {
+          "pattern": "Pedidos({key})/itensSnapshot({key2}):?query:",
+          "name": "PedidosItensSnapshotsObjectPage",
+          "target": "PedidosItensSnapshotsObjectPage"
         }
       ],
       "targets": {
@@ -114,9 +156,19 @@
                 "@com.sap.vocabularies.UI.v1.LineItem": {
                   "tableSettings": {
                     "type": "ResponsiveTable"
+                  },
+                  "actions": {
+                    "importarPlanilha": {
+                      "press": "pedidoscompras.ext.ImportarPlanilha.abrir",
+                      "visible": true,
+                      "enabled": true,
+                      "requiresSelection": false,
+                      "text": "{i18n>importarPlanilha}"
+                    }
                   }
                 }
-              }
+              },
+              "initialLoad": "Enabled"
             }
           }
         },
@@ -127,7 +179,57 @@
           "options": {
             "settings": {
               "editableHeaderContent": false,
-              "contextPath": "/Pedidos"
+              "contextPath": "/Pedidos",
+              "navigation": {
+                "itens": {
+                  "detail": {
+                    "route": "ItensPedidoObjectPage"
+                  }
+                },
+                "itensSnapshot": {
+                  "detail": {
+                    "route": "PedidosItensSnapshotsObjectPage"
+                  }
+                }
+              },
+              "controlConfiguration": {
+                "itens/@com.sap.vocabularies.UI.v1.LineItem": {
+                  "tableSettings": {
+                    "type": "ResponsiveTable",
+                    "creationMode": {
+                      "name": "InlineCreationRows"
+                    }
+                  }
+                },
+                "itensSnapshot/@com.sap.vocabularies.UI.v1.LineItem": {
+                  "tableSettings": {
+                    "type": "ResponsiveTable",
+                    "selectionMode": "None"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "ItensPedidoObjectPage": {
+          "type": "Component",
+          "id": "ItensPedidoObjectPage",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "editableHeaderContent": false,
+              "contextPath": "/Pedidos/itens"
+            }
+          }
+        },
+        "PedidosItensSnapshotsObjectPage": {
+          "type": "Component",
+          "id": "PedidosItensSnapshotsObjectPage",
+          "name": "sap.fe.templates.ObjectPage",
+          "options": {
+            "settings": {
+              "editableHeaderContent": false,
+              "contextPath": "/Pedidos/itensSnapshot"
             }
           }
         }
