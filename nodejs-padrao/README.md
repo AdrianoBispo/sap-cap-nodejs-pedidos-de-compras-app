@@ -5,8 +5,9 @@ Compras construída em SAP RAP (pacote `ZAVBS_PC`). Backend em **Node.js (ESM, J
 banco **SQLite** em desenvolvimento e cinco aplicações **SAPUI5** (quatro Fiori Elements e uma
 freestyle) servidas pelo próprio CAP.
 
-> A versão em TypeScript fica em [`../nodejs-typescript`](../nodejs-typescript) e a especificação
-> técnica em [`../docs`](../docs).
+> A versão em TypeScript (equivalente, com tipos gerados pelo cds-typer) fica em
+> [`../nodejs-typescript`](../nodejs-typescript) e a especificação técnica em
+> [`../docs/especificacao-tecnica.md`](../docs/especificacao-tecnica.md).
 
 ## Aplicações
 

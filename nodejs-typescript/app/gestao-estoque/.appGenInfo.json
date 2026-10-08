@@ -1,0 +1,28 @@
+{
+  "generationParameters": {
+    "generationDate": "Thu Oct 08 2026 08:53:39 GMT-0300 (Horário Padrão de Brasília)",
+    "generatorPlatform": "CLI",
+    "serviceType": "Local CAP",
+    "metadataFilename": "",
+    "serviceUrl": "http://localhost:4004/odata/v4/estoque/",
+    "appName": "gestao-estoque",
+    "appTitle": "Gestão de Estoque",
+    "appDescription": "Itens de estoque, SKU e disponibilidade",
+    "appNamespace": "",
+    "ui5Theme": "sap_horizon",
+    "ui5Version": "1.148.12",
+    "enableEslint": true,
+    "enableTypeScript": false,
+    "showMockDataInfo": false,
+    "generatorVersion": "1.28.0",
+    "template": "List Report Page V4",
+    "generatorName": "SAP Fiori Application Generator",
+    "entityRelatedConfig": [
+      {
+        "type": "Main Entity",
+        "value": "Itens"
+      }
+    ],
+    "launchText": "To launch the generated app, start your CAP project:  and navigate to the following location in your browser:\n\nhttp://localhost:4004/gestao-estoque/webapp/index.html"
+  }
+}

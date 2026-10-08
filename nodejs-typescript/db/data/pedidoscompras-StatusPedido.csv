@@ -1,0 +1,6 @@
+code;name;descr;ordem;criticality
+ABERTO;Aberto;Aberto;1;0
+AGUARDANDO_APROVACAO;Aguardando aprovação;Aguardando aprovação;2;2
+PROCESSANDO_REEMBOLSO;Processando reembolso;Processando reembolso;3;2
+CANCELADO;Cancelado;Cancelado;4;1
+FINALIZADO;Finalizado;Finalizado;5;3

@@ -1,0 +1,4 @@
+code;name;descr;ordem;criticality
+PENDENTE;Pendente;Pendente;1;2
+APROVADO;Aprovado;Aprovado;2;3
+REJEITADO;Rejeitado;Rejeitado;3;1
