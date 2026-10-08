@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "./gen/srv",
+    "sourceMap": false,
+    "noEmit": false
+  },
+  "include": [
+    "srv/**/*.ts"
+  ]
+}

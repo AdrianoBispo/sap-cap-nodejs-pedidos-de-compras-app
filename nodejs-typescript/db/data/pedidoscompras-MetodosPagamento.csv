@@ -1,0 +1,3 @@
+code;name;descr;ordem;criticality
+CARTAO_CREDITO;Cartão de crédito;Cartão de crédito;1;0
+CARTAO_DEBITO;Cartão de débito;Cartão de débito;2;0

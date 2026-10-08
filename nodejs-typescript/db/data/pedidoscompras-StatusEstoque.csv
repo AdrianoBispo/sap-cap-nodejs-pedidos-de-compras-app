@@ -1,0 +1,4 @@
+code;name;descr;ordem;criticality
+SEM_ESTOQUE;Sem estoque;Sem estoque;1;1
+ACABANDO;Acabando;Acabando;2;2
+EM_ESTOQUE;Em estoque;Em estoque;3;3
