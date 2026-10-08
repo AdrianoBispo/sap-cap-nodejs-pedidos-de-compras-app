@@ -1,0 +1,1 @@
+using PedidosService as service from '../../srv/pedidos-service';

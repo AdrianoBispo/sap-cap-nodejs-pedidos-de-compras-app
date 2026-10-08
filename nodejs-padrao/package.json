@@ -14,14 +14,19 @@
     "@cap-js/cds-test": "^1.0.2",
     "@cap-js/sqlite": "^3",
     "@sap/cds-dk": "^10.1.0",
-    "eslint": "^10.12.0"
+    "eslint": "^10.12.0",
+    "cds-plugin-ui5": "^0.17.0"
   },
   "scripts": {
     "start": "cds-serve",
     "watch": "cds watch",
     "test": "node --test --test-concurrency=1 \"test/**/*.test.js\"",
     "lint": "eslint .",
-    "dados:demo": "node scripts/gerar-dados-demo.js"
+    "dados:demo": "node scripts/gerar-dados-demo.js",
+    "watch-gestao-clientes": "cds watch --open gestaoclientes/index.html?sap-ui-xx-viewCache=false --livereload false",
+    "watch-gestao-estoque": "cds watch --open gestaoestoque/index.html?sap-ui-xx-viewCache=false --livereload false",
+    "watch-pedidos-compras": "cds watch --open pedidoscompras/index.html?sap-ui-xx-viewCache=false --livereload false",
+    "watch-gestao-reembolsos": "cds watch --open gestaoreembolsos/index.html?sap-ui-xx-viewCache=false --livereload false"
   },
   "cds": {
     "i18n": {
@@ -56,5 +61,14 @@
         "timeout": 5000
       }
     }
-  }
+  },
+  "workspaces": [
+    "app/*"
+  ],
+  "sapux": [
+    "app/gestao-clientes",
+    "app/gestao-estoque",
+    "app/pedidos-compras",
+    "app/gestao-reembolsos"
+  ]
 }

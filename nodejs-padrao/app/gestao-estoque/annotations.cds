@@ -1,0 +1,1 @@
+using EstoqueService as service from '../../srv/estoque-service';
