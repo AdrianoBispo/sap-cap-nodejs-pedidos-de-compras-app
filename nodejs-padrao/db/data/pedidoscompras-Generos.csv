@@ -1,0 +1,6 @@
+code;name;descr;ordem;criticality
+MASCULINO;Masculino;Masculino;1;0
+FEMININO;Feminino;Feminino;2;0
+NAO_BINARIO;Não binário;Não binário;3;0
+OUTRO;Outro;Outro;4;0
+NAO_INFORMADO;Prefiro não informar;Prefiro não informar;5;0

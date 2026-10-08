@@ -1,15 +1,59 @@
 {
-  "name": "nodejs-padrao",
+  "name": "pedidos-compras-cap",
   "version": "1.0.0",
+  "description": "Pedidos de Compras em SAP CAP (Node.js, JavaScript ESM) - porte do projeto RAP ZAVBS_PC",
   "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  },
   "dependencies": {
     "@sap/cds": "^10"
   },
   "devDependencies": {
-    "@cap-js/sqlite": "^3"
+    "@cap-js/cds-test": "^1.0.2",
+    "@cap-js/sqlite": "^3",
+    "@sap/cds-dk": "^10.1.0"
   },
   "scripts": {
-    "start": "cds-serve"
+    "start": "cds-serve",
+    "watch": "cds watch",
+    "test": "node --test --test-concurrency=1 test/",
+    "lint": "eslint .",
+    "dados:demo": "node scripts/gerar-dados-demo.js"
   },
-  "private": true
+  "cds": {
+    "i18n": {
+      "default_language": "pt"
+    },
+    "requires": {
+      "auth": {
+        "[development]": {
+          "kind": "mocked",
+          "users": {
+            "admin": {
+              "password": "admin",
+              "roles": [
+                "Admin"
+              ]
+            },
+            "comum": {
+              "password": "comum",
+              "roles": [
+                "Comum"
+              ]
+            },
+            "*": false
+          }
+        }
+      },
+      "viacep": {
+        "kind": "rest",
+        "credentials": {
+          "url": "https://viacep.com.br/ws"
+        },
+        "timeout": 5000
+      }
+    }
+  }
 }

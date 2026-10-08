@@ -1,0 +1,8 @@
+code;name;descr;ordem;criticality
+ELETRONICOS;Eletrônicos;Eletrônicos;1;0
+INFORMATICA;Informática;Informática;2;0
+ESCRITORIO;Escritório;Escritório;3;0
+CASA;Casa e decoração;Casa e decoração;4;0
+VESTUARIO;Vestuário;Vestuário;5;0
+ALIMENTOS;Alimentos;Alimentos;6;0
+OUTROS;Outros;Outros;7;0

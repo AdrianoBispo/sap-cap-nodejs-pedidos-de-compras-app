@@ -1,0 +1,147 @@
+using {pedidoscompras as db} from '../db/schema';
+using {pedidoscompras.ResultadoImportacao} from './common';
+
+/**
+ * Aplicação Pedidos de Compras (equivalente ao serviço ZUI_PC_PEDIDOS_COMPRAS).
+ *
+ * Ciclo de vida: rascunho -> Salvar registra o pedido (ABERTO) e reserva o
+ * estoque -> Efetuar Pagamento -> Aprovar pedido (FINALIZADO) ou Cancelar.
+ * Clientes e itens são consumidos como entidades somente leitura (value helps).
+ */
+@path    : 'pedidos'
+@requires: 'authenticated-user'
+service PedidosService {
+
+  @odata.draft.enabled
+  @restrict: [{
+    grant: '*',
+    to   : [
+      'Comum',
+      'Admin'
+    ]
+  }]
+  entity Pedidos                 as projection on db.Pedidos {
+    *,
+    cliente.nome              as nomeCliente,
+    cliente.cpf               as cpfCliente,
+    cliente.cpfFormatado      as cpfClienteFormatado,
+    cliente.email             as emailCliente,
+    cliente.telefoneFormatado as telefoneCliente,
+    cliente.genero.name       as generoCliente,
+    cliente.dataNascimento    as dataNascimentoCliente
+  }
+    excluding {
+      reembolsos
+    }
+    actions {
+      /** Pagamento simulado com cartão. Dados do cartão só em memória. */
+      @(
+        Core.OperationAvailable: ($self.statusPedido.code = 'ABERTO'),
+        Common.SideEffects     : {TargetEntities: [
+          in,
+          in.pagamento
+        ]}
+      )
+      action efetuarPagamento(
+        @mandatory metodoPagamento : String(20),
+        @mandatory numeroCartao    : String(19),
+        @mandatory validade        : String(5),
+        @mandatory cvv             : String(4)) returns Pedidos;
+
+      /** Baixa o estoque reservado, gera os snapshots e finaliza o pedido. */
+      @(
+        Core.OperationAvailable: ($self.statusPedido.code = 'AGUARDANDO_APROVACAO'),
+        Common.SideEffects     : {TargetEntities: [
+          in,
+          in.clienteSnapshot,
+          in.itensSnapshot
+        ]}
+      )
+      action aprovarPedido() returns Pedidos;
+
+      /**
+       * Cancela o pedido (libera a reserva e gera os snapshots). Com pagamento
+       * aprovado abre uma solicitação de reembolso (PROCESSANDO_REEMBOLSO).
+       */
+      @(
+        Core.OperationAvailable: ($self.statusPedido.code = 'ABERTO' or $self.statusPedido.code = 'AGUARDANDO_APROVACAO'),
+        Common.SideEffects     : {TargetEntities: [
+          in,
+          in.clienteSnapshot,
+          in.itensSnapshot
+        ]}
+      )
+      action cancelarPedido(
+        @mandatory motivoCancelamento : String(500)) returns Pedidos;
+    };
+
+  /** Clientes (somente leitura): textos e value help do pedido. */
+  @readonly
+  entity Clientes                as projection on db.Clientes {
+    ID,
+    cpf,
+    cpfFormatado,
+    nome,
+    email,
+    telefoneFormatado,
+    genero,
+    dataNascimento,
+    clienteAtivo,
+    enderecoPrincipal.cidade as cidade,
+    enderecoPrincipal.uf     as uf
+  };
+
+  /** Value help: apenas clientes ativos podem fazer novos pedidos. */
+  @readonly
+  entity ClientesAtivos          as projection on Clientes
+                                    where
+                                      clienteAtivo = true;
+
+  @readonly
+  entity Enderecos               as projection on db.Enderecos {
+    ID,
+    cliente,
+    cep,
+    cepFormatado,
+    enderecoCompleto,
+    cidade,
+    uf,
+    principal
+  };
+
+  /** Itens (somente leitura): textos e value help dos itens do pedido. */
+  @readonly
+  entity Itens                   as projection on db.Itens {
+    ID,
+    sku,
+    nome,
+    categoria,
+    precoUnitario,
+    currency,
+    qtdeDisponivel,
+    statusEstoque_code,
+    statusEstoque,
+    itemAtivo
+  };
+
+  /** Value help: apenas itens ativos. */
+  @readonly
+  entity ItensAtivos             as projection on Itens
+                                    where
+                                      itemAtivo = true;
+
+  @readonly
+  entity StatusPedido            as projection on db.StatusPedido;
+
+  @readonly
+  entity StatusPagamento         as projection on db.StatusPagamento;
+
+  @readonly
+  entity MetodosPagamento        as projection on db.MetodosPagamento;
+
+  /**
+   * Importação em massa por planilha (.xlsx ou .csv): uma linha por item;
+   * linhas com a mesma referência formam um pedido. Tudo ou nada.
+   */
+  action importarPlanilha(arquivo : LargeBinary not null, nomeArquivo : String(255)) returns ResultadoImportacao;
+}
