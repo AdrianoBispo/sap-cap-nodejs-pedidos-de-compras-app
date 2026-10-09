@@ -259,4 +259,48 @@ describe('Pedidos de Compras', () => {
       assert.ok(noRascunho.status >= 400)
     })
   })
+  describe('campos somente leitura (só o cliente e os itens são informados)', () => {
+    it('no $metadata, dados do cliente e do pagamento são calculados (não editáveis)', async () => {
+      const { data: xml } = await api.get(`${P}/$metadata`)
+      const anotacoes = (alvo: string): string => xml.match(new RegExp(`<Annotations Target="PedidosService\\.${alvo}">([\\s\\S]*?)</Annotations>`))?.[1] ?? ''
+      for (const campo of ['nomeCliente', 'cpfClienteFormatado', 'emailCliente', 'telefoneCliente', 'generoCliente', 'dataNascimentoCliente']) {
+        assert.match(anotacoes(`Pedidos/${campo}`), /Core\.Computed/, campo)
+        assert.doesNotMatch(anotacoes(`Pedidos/${campo}`), /FieldControlType\/Mandatory/, campo)
+      }
+      for (const campo of ['metodoPagamento_code', 'statusPagamento_code', 'bandeiraCartao', 'cartaoMascarado', 'codigoAutorizacao', 'mensagemPagamento', 'dataPagamento']) {
+        assert.match(anotacoes(`Pagamentos/${campo}`), /Core\.Computed/, campo)
+      }
+      assert.match(anotacoes('Pedidos/observacao'), /FieldControlType\/ReadOnly/)
+    })
+
+    it('ao informar o cliente, os dados dele chegam pela associação e não aceitam escrita', async () => {
+      const cliente = await clienteAtivo()
+      const ID = await rascunho(cliente.ID, [])
+      await api.patch(`${P}/Pedidos${api.chave(ID, false)}`, { emailCliente: 'invasor@exemplo.com', nomeCliente: 'Outro' })
+      const { data } = await api.get(`${P}/Pedidos${api.chave(ID, false)}?$expand=cliente`)
+      assert.equal(data.cliente.email, cliente.email)
+      assert.equal(data.cliente.nome, cliente.nome)
+      assert.notEqual(data.emailCliente, 'invasor@exemplo.com')
+      assert.notEqual(data.nomeCliente, 'Outro')
+      assert.ok(data.enderecoPrincipalCompleto, 'endereço principal preenchido automaticamente')
+    })
+
+    it('o pagamento não aceita escrita pela tela e é preservado na edição dos itens', async () => {
+      const pedido = await pedidoRegistrado([{ item: (await itemComEstoque()).ID, qtde: 1 }])
+      await acao(pedido.ID, 'efetuarPagamento', CARTAO_RECUSADO)
+      const { data: antes } = await api.get(`${P}/Pedidos${api.chave(pedido.ID)}/pagamento`)
+
+      await api.editar(P, 'Pedidos', pedido.ID)
+      const { data: pagRascunho } = await api.get(`${P}/Pedidos${api.chave(pedido.ID, false)}/pagamento`)
+      const escrita = await falha(api.patch(`${P}/Pagamentos${api.chave(pagRascunho.ID, false)}`, { statusPagamento_code: 'APROVADO' }))
+      assert.ok(escrita.status >= 400)
+
+      const { data: linhas } = await api.get(`${P}/Pedidos${api.chave(pedido.ID, false)}/itens`)
+      await api.patch(`${P}/ItensPedido${api.chave(linhas.value[0].ID, false)}`, { qtdeItemPedido: 2 })
+      await api.ativar(P, 'Pedidos', pedido.ID)
+      const { data: depois } = await api.get(`${P}/Pedidos${api.chave(pedido.ID)}/pagamento`)
+      assert.equal(depois.statusPagamento_code, 'RECUSADO')
+      assert.equal(depois.cartaoMascarado, antes.cartaoMascarado)
+    })
+  })
 })

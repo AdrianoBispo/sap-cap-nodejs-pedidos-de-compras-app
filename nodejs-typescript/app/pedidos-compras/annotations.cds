@@ -16,7 +16,7 @@ annotate service.Pedidos with @(
     TypeName      : 'Pedido de compra',
     TypeNamePlural: 'Pedidos de compras',
     Title         : {Value: numeroPedido},
-    Description   : {Value: nomeCliente}
+    Description   : {Value: cliente.nome}
   },
   UI.SelectionFields              : [
     cliente_ID,
@@ -54,11 +54,11 @@ annotate service.Pedidos with @(
       ![@UI.Importance]: #High
     },
     {
-      Value: cpfClienteFormatado,
+      Value: cliente.cpfFormatado,
       Label: 'CPF'
     },
     {
-      Value            : nomeCliente,
+      Value            : cliente_ID,
       Label            : 'Cliente',
       ![@UI.Importance]: #High
     },
@@ -199,25 +199,26 @@ annotate service.Pedidos with @(
     }
   ],
   UI.FieldGroup #Cliente          : {Data: [
+    // Só o cliente é informado; os demais dados vêm da associação (somente leitura)
     {Value: cliente_ID},
     {
-      Value: cpfClienteFormatado,
+      Value: cliente.cpfFormatado,
       Label: 'CPF'
     },
     {
-      Value: emailCliente,
+      Value: cliente.email,
       Label: 'E-mail'
     },
     {
-      Value: telefoneCliente,
+      Value: cliente.telefoneFormatado,
       Label: 'Telefone'
     },
     {
-      Value: generoCliente,
+      Value: cliente.genero_code,
       Label: 'Gênero'
     },
     {
-      Value: dataNascimentoCliente,
+      Value: cliente.dataNascimento,
       Label: 'Data de nascimento'
     },
     {Value: enderecoPrincipalCompleto}
@@ -245,24 +246,20 @@ annotate service.Pedidos with @(
     {Value: dataCancelamento},
     {Value: canceladoPor}
   ]},
-  // Troca de cliente: o backend usa o endereço principal atual
+  // Troca de cliente: o backend usa o endereço principal atual e a UI
+  // recarrega os dados do cliente pela associação
   Common.SideEffects #Cliente     : {
     SourceProperties: [cliente_ID],
     TargetProperties: [
       'endereco_ID',
-      'enderecoPrincipalCompleto',
-      'nomeCliente',
-      'cpfClienteFormatado',
-      'emailCliente',
-      'telefoneCliente',
-      'generoCliente',
-      'dataNascimentoCliente'
-    ]
+      'enderecoPrincipalCompleto'
+    ],
+    TargetEntities  : [cliente]
   }
 ) {
   // O cliente é escolhido na criação (obrigatório); depois do registro fica somente leitura
   cliente               @Common.FieldControl: (case when numeroPedido is null then 7 else 1 end)  @Common: {
-    Text           : nomeCliente,
+    Text           : cliente.nome,
     TextArrangement: #TextOnly,
     SemanticObject : 'Cliente',
     ValueList      : {
@@ -505,4 +502,17 @@ annotate service.ItensAtivos with {
   precoUnitario      @title: 'Preço unitário';
   qtdeDisponivel     @title: 'Qtde disponível';
   statusEstoque_code @title: 'Status do estoque';
+};
+
+// Dados do cliente exibidos no pedido: sempre somente leitura (a entidade é
+// @readonly no serviço; aqui também saem as regras de entrada herdadas)
+annotate service.Clientes with {
+  cpf               @Core.Computed  @mandatory: false;
+  cpfFormatado      @Core.Computed  @title: 'CPF';
+  nome              @Core.Computed  @mandatory: false;
+  email             @Core.Computed  @mandatory: false  @assert.format: null;
+  telefoneFormatado @Core.Computed  @title: 'Telefone';
+  genero            @Core.Computed;
+  dataNascimento    @Core.Computed  @mandatory: false;
+  clienteAtivo      @Core.Computed;
 };

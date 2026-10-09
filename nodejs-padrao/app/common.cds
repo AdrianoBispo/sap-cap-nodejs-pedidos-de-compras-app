@@ -127,7 +127,7 @@ annotate db.Pedidos with {
   enderecoPrincipalCompleto @title: 'Endereço de entrega (principal)'  @Common.FieldControl: #ReadOnly;
   statusPedido              @title: 'Status do pedido'  @Common.FieldControl: #ReadOnly;
   statusPagamento           @title: 'Status do pagamento'  @Common.FieldControl: #ReadOnly;
-  observacao                @title: 'Observação'  @UI.MultiLineText;
+  observacao                @title: 'Observação'  @UI.MultiLineText  @Common.FieldControl: #ReadOnly;
   currency                  @UI.Hidden;
   valorTotal                @title: 'Valor total'  @Common.FieldControl: #ReadOnly  @Measures.ISOCurrency: currency_code;
   dataFinalizacao           @title: 'Data de finalização'  @Common.FieldControl: #ReadOnly;

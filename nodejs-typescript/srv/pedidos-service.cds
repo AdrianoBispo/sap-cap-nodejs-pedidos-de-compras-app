@@ -145,3 +145,32 @@ service PedidosService {
    */
   action importarPlanilha(arquivo : LargeBinary not null, nomeArquivo : String(255)) returns ResultadoImportacao;
 }
+
+/*
+ * No pedido o usuário informa apenas o cliente (e os itens): os dados do
+ * cliente vêm da associação e são somente leitura (não herdam o @mandatory
+ * da entidade Clientes). Pagamento e snapshots só são gravados pelas actions
+ * (efetuarPagamento, aprovarPedido, cancelarPedido), nunca pela tela.
+ */
+annotate PedidosService.Pedidos with {
+  nomeCliente           @Core.Computed  @mandatory: false;
+  cpfCliente            @Core.Computed  @mandatory: false;
+  cpfClienteFormatado   @Core.Computed  @mandatory: false;
+  emailCliente          @Core.Computed  @mandatory: false  @assert.format: null;
+  telefoneCliente       @Core.Computed  @mandatory: false;
+  generoCliente         @Core.Computed  @mandatory: false;
+  dataNascimentoCliente @Core.Computed  @mandatory: false;
+};
+
+annotate PedidosService.Pagamentos with @readonly {
+  metodoPagamento       @Core.Computed;
+  statusPagamento       @Core.Computed;
+  bandeiraCartao        @Core.Computed;
+  ultimos4DigitosCartao @Core.Computed;
+  cartaoMascarado       @Core.Computed;
+  codigoAutorizacao     @Core.Computed;
+  mensagemPagamento     @Core.Computed;
+  dataPagamento         @Core.Computed;
+};
+annotate PedidosService.PedidosClienteSnapshots with @readonly;
+annotate PedidosService.PedidosItensSnapshots with @readonly;
