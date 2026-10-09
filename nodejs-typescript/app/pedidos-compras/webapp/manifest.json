@@ -206,7 +206,7 @@
                   "tableSettings": {
                     "type": "ResponsiveTable",
                     "creationMode": {
-                      "name": "InlineCreationRows"
+                      "name": "Inline"
                     }
                   }
                 },

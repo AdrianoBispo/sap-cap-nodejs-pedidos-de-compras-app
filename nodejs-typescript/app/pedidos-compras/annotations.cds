@@ -256,6 +256,11 @@ annotate service.Pedidos with @(
       'cpfClienteFormatado'
     ],
     TargetEntities  : [cliente]
+  },
+  // Inclusão ou exclusão de itens no rascunho: total do pedido
+  Common.SideEffects #Itens       : {
+    SourceEntities  : [itens],
+    TargetProperties: ['valorTotal']
   }
 ) {
   // O cliente é escolhido na criação (obrigatório); depois do registro fica somente leitura.
