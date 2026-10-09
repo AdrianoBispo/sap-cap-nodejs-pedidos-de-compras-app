@@ -223,6 +223,17 @@ annotate service.Pedidos with @(
   ]},
   UI.FieldGroup #Pedido           : {Data: [
     {Value: numeroPedido},
+    // Pedido com solicitação de reembolso: abre a solicitação na Gestão de
+    // Reembolsos (chave semântica: numeroPedido), o caminho inverso do link
+    // Pedido da app de Reembolsos
+    {
+      $Type         : 'UI.DataFieldWithIntentBasedNavigation',
+      Value         : numeroPedido,
+      Label         : 'Solicitação de reembolso',
+      SemanticObject: 'Reembolso',
+      Action        : 'manage',
+      ![@UI.Hidden] : semReembolso
+    },
     {
       Value      : statusPedido_code,
       Criticality: statusPedido.criticality
@@ -326,6 +337,7 @@ annotate service.Pedidos with @(
   telefoneCliente       @title: 'Telefone';
   generoCliente         @title: 'Gênero';
   dataNascimentoCliente @title: 'Data de nascimento';
+  semReembolso          @UI.Hidden;
 };
 
 // Na UI, "Efetuar Pagamento" abre o diálogo com campos mascarados de
@@ -482,14 +494,33 @@ annotate service.Pagamentos with @(UI.FieldGroup #Pagamento: {Data: [
 
 annotate service.PedidosClienteSnapshots with @(UI.FieldGroup #Snapshot: {Data: [
   {Value: nome},
-  {Value: cpfFormatado},
+  {Value: cpf},
   {Value: email},
   {Value: telefoneFormatado},
   {Value: genero_code},
   {Value: dataNascimento},
   {Value: enderecoCompleto},
   {Value: createdAt}
-]});
+]}) {
+  // Pedido encerrado: os dados congelados também abrem o cliente na Gestão de
+  // Clientes (chave semântica: cpf), como os dados atuais do pedido aberto
+  nome @Common: {
+    SemanticObject       : 'Cliente',
+    SemanticObjectMapping: [{
+      LocalProperty         : cpf,
+      SemanticObjectProperty: 'cpf'
+    }]
+  };
+  cpf  @title: 'CPF'  @Common: {
+    Text                 : cpfFormatado,
+    TextArrangement      : #TextOnly,
+    SemanticObject       : 'Cliente',
+    SemanticObjectMapping: [{
+      LocalProperty         : cpf,
+      SemanticObjectProperty: 'cpf'
+    }]
+  };
+};
 
 annotate service.PedidosItensSnapshots with @(
   UI.HeaderInfo: {
@@ -513,8 +544,45 @@ annotate service.PedidosItensSnapshots with @(
       Value            : valorTotal,
       ![@UI.Importance]: #High
     }
-  ]
-);
+  ],
+  // Object Page do item congelado (a tabela Itens do pedido encerrado navega
+  // para cá): sem facets a página abria só com o cabeçalho
+  UI.Facets    : [{
+    $Type : 'UI.ReferenceFacet',
+    ID    : 'DadosItemHistorico',
+    Label : 'Item no encerramento do pedido',
+    Target: '@UI.FieldGroup#Historico'
+  }],
+  UI.FieldGroup #Historico: {Data: [
+    {Value: nome},
+    {Value: sku},
+    {Value: descricao},
+    {Value: categoria_code},
+    {Value: quantidade},
+    {Value: precoUnitario},
+    {Value: valorTotal},
+    {
+      Value: createdAt,
+      Label: 'Congelado em'
+    }
+  ]}
+) {
+  // Item e SKU abrem o item atual na Gestão de Estoque (chave semântica: sku)
+  nome @Common: {
+    SemanticObject       : 'ItemEstoque',
+    SemanticObjectMapping: [{
+      LocalProperty         : sku,
+      SemanticObjectProperty: 'sku'
+    }]
+  };
+  sku  @Common: {
+    SemanticObject       : 'ItemEstoque',
+    SemanticObjectMapping: [{
+      LocalProperty         : sku,
+      SemanticObjectProperty: 'sku'
+    }]
+  };
+};
 
 annotate service.ClientesAtivos with {
   ID           @title: 'Cliente'  @Common.Text: nome  @Common.TextArrangement: #TextOnly;

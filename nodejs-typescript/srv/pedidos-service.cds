@@ -28,7 +28,12 @@ service PedidosService {
     cliente.email             as emailCliente,
     cliente.telefoneFormatado as telefoneCliente,
     cliente.genero.name       as generoCliente,
-    cliente.dataNascimento    as dataNascimentoCliente
+    cliente.dataNascimento    as dataNascimentoCliente,
+    /** Sem solicitação de reembolso: esconde o link para a Gestão de Reembolsos. */
+    case
+      when exists reembolsos then false
+      else true
+    end                       as semReembolso : Boolean
   }
     excluding {
       reembolsos
