@@ -137,7 +137,8 @@ regras de domínio, dos testes e dos scripts.
 - **Importação por planilha** (`.xlsx` ou `.csv`) em Clientes, Estoque e Pedidos, tudo ou nada.
 - **Análises**: app freestyle com 20 análises sobre um serviço com agregações `$apply`.
 - **Launchpad local** (sandbox do SAP Fiori launchpad) com os cinco tiles e navegação entre as apps
-  por objetos semânticos (o cliente e o item do pedido viram links).
+  por objetos semânticos: no pedido, Cliente e CPF abrem o cliente e Item e SKU abrem o item; no
+  reembolso, o Pedido abre o pedido e Cliente e CPF abrem o cliente, sempre direto no registro.
 - **Autorização** por papel: `Admin` e `Comum` (`@requires` / `@restrict`).
 - **Concorrência** de estoque com `UPDATE` condicional atômico na transação da requisição.
 
@@ -189,6 +190,8 @@ flowchart LR
     APPA --> SA
     APPP -. objeto semântico .-> APPC
     APPP -. objeto semântico .-> APPE
+    APPR -. objeto semântico .-> APPP
+    APPR -. objeto semântico .-> APPC
     SC & SE & SP & SR --> LIB
     LIB --> DB
     SA --> DB
@@ -354,8 +357,16 @@ side effects vêm de `app/<app>/annotations.cds` e `app/common.cds`.
   (`webapp/ext/ImportarPlanilha.js`), com diálogo de escolha de arquivo que chama a action
   `importarPlanilha` do serviço.
 - **Itens do pedido** são criados na própria tabela (*inline*), só no rascunho.
-- **Navegação entre apps**: no launchpad local, o cliente e o item do pedido abrem as apps de
-  Clientes e Estoque.
+- **Navegação entre apps** (no launchpad local): os campos abaixo viram links que abrem a Object
+  Page do registro na app de destino, que o localiza pela chave semântica (`cpf`, `sku`,
+  `numeroPedido`) recebida no contexto da navegação.
+
+  | Origem | Campos com link | Destino |
+  | --- | --- | --- |
+  | Pedidos | Cliente, CPF | Gestão de Clientes (`Cliente-manage`, `cpfCliente` → `cpf`) |
+  | Itens do pedido | Item, SKU | Gestão de Estoque (`ItemEstoque-manage`, `skuItem` → `sku`) |
+  | Reembolsos | Pedido (link direto, `DataFieldWithIntentBasedNavigation`) | Pedidos de Compras (`PedidoCompra-manage`) |
+  | Reembolsos | Cliente, CPF | Gestão de Clientes (`Cliente-manage`) |
 - **Validação**: manifests na versão 2.0.0, UI5 linter sem apontamentos; telas conferidas no navegador.
 
 ---
@@ -590,7 +601,8 @@ num total de 20 análises, e uma página de detalhe por análise.
 
 | Versão | Mudanças |
 | --- | --- |
-| v1.3 | Importação de pedidos sem duplicidade: a coluna Pedido vira a *Referência de importação* do pedido, e a mesma referência para o mesmo cliente é recusada enquanto houver pedido não cancelado com ela; 68 testes por versão |
+| v1.4 | Importação de pedidos sem duplicidade: a coluna Pedido vira a *Referência de importação* do pedido, e a mesma referência para o mesmo cliente é recusada enquanto houver pedido não cancelado com ela; 68 testes por versão; especificação técnica 2.1 |
+| v1.3 | Navegação entre aplicações: no pedido, Cliente/CPF → Gestão de Clientes e Item/SKU → Gestão de Estoque; no reembolso, Pedido → Pedidos de Compras e Cliente/CPF → Gestão de Clientes; `skuItem` em `ItensPedido` e CPF sem formatação em `Reembolsos` para o contexto da navegação |
 | v1.2 | Correção no pedido: só o cliente (na criação) e os itens são informados; dados do cliente lidos pela associação e somente leitura (antes apareciam editáveis e obrigatórios e ficavam vazios no rascunho); pagamento e snapshots somente leitura, gravados só pelas ações; observação somente leitura na tela; testes de regressão (66 por versão); README principal no modelo do projeto RAP |
 | v1.1 | Versão TypeScript (`nodejs-typescript`, `cds-typer`, `tsx`); especificação técnica 2.0 (.md e .docx); proxy HTTPS local (`npm run https`) |
 | v1.0 | Versão JavaScript (`nodejs-padrao`): modelo, serviços, regras de negócio, cinco apps SAPUI5, launchpad local, importação por planilha, camada analítica, dados de demonstração e suíte de testes |

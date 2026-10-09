@@ -113,6 +113,8 @@ nodejs-padrao/
   *Cancelar pedido* (libera a reserva e gera snapshots; com pagamento aprovado abre reembolso).
 - **Reembolsos**: *Aprovar* cancela o pedido, libera a reserva e devolve o pagamento; *Rejeitar*
   (motivo obrigatório) devolve o pedido ao status anterior.
+- **Navegação entre apps** (launchpad local): no pedido, Cliente/CPF abrem o cliente e Item/SKU
+  abrem o item; no reembolso, o Pedido abre o pedido e Cliente/CPF abrem o cliente.
 - **Concorrência**: cada movimento de estoque é um `UPDATE` condicional atômico ("só reserva se o
   saldo atual cobre a quantidade"); qualquer erro desfaz a transação inteira.
 - **Importação por planilha** (`.xlsx`/`.csv`) em Clientes, Estoque e Pedidos, tudo ou nada; a

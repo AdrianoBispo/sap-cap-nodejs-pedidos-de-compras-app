@@ -1,10 +1,12 @@
 # Especificação Técnica — Sistema de Pedidos de Compras (SAP CAP + SAP Fiori)
 
-> **Versão 2.0 — outubro de 2026.** Esta revisão descreve o sistema **como implementado** nas duas
+> **Versão 2.1 — outubro de 2026.** Esta revisão descreve o sistema **como implementado** nas duas
 > versões do repositório: [`nodejs-padrao`](../nodejs-padrao) (JavaScript) e
 > [`nodejs-typescript`](../nodejs-typescript) (TypeScript). As duas compartilham o mesmo modelo CDS,
 > os mesmos serviços, as mesmas aplicações SAPUI5 e a mesma suíte de testes; diferem apenas na
-> linguagem dos handlers (seção 19). A seção 22 resume o que mudou em relação à versão 1.
+> linguagem dos handlers (seção 19). A seção 22 resume o que mudou em relação à versão 1 e na
+> revisão 2.1 (campos somente leitura no pedido, navegação entre apps e importação de pedidos sem
+> duplicidade).
 
 ---
 
@@ -365,8 +367,8 @@ Todos em OData V4, sob `/odata/v4/<caminho>`, com um serviço por aplicação.
 |---|---|---|---|---|
 | `ClientesService` | `clientes` | `Clientes` (com `cidadePrincipal`, `ufPrincipal`), `Enderecos`, `Generos`, `CepsCadastrados` | `Clientes` (+ `Enderecos`) | `definirEnderecoPrincipal` (vinculada a `Enderecos`), `importarPlanilha` |
 | `EstoqueService` | `estoque` | `Itens`, `Categorias`, `StatusEstoque` | `Itens` | `importarPlanilha` |
-| `PedidosService` | `pedidos` | `Pedidos` (com dados do cliente), `Clientes`, `ClientesAtivos`, `Enderecos`, `Itens`, `ItensAtivos`, CodeLists | `Pedidos` (+ `ItensPedido`) | `efetuarPagamento`, `aprovarPedido`, `cancelarPedido` (vinculadas), `importarPlanilha` |
-| `ReembolsosService` | `reembolsos` | `Reembolsos` (somente leitura, com dados do cliente), `StatusReembolso`, `StatusPedido` | — | `aprovarReembolso`, `rejeitarReembolso` (vinculadas) |
+| `PedidosService` | `pedidos` | `Pedidos` (com dados do cliente), `ItensPedido` (com `skuItem`, o SKU do item), `Clientes`, `ClientesAtivos`, `Enderecos`, `Itens`, `ItensAtivos`, CodeLists | `Pedidos` (+ `ItensPedido`) | `efetuarPagamento`, `aprovarPedido`, `cancelarPedido` (vinculadas), `importarPlanilha` |
+| `ReembolsosService` | `reembolsos` | `Reembolsos` (somente leitura, com nome, `cpfCliente` e `cpfClienteFormatado` do cliente), `StatusReembolso`, `StatusPedido` | — | `aprovarReembolso`, `rejeitarReembolso` (vinculadas) |
 | `AnaliticoService` | `analitico` | `PedidosAnalise`, `ClientesAnalise`, `ItensAnalise`, `ReembolsosAnalise` (somente leitura) | — | — |
 
 `CepsCadastrados` é uma visão agregada (um registro por CEP já validado e que não é CEP geral) usada
@@ -706,8 +708,7 @@ O app freestyle **Análises de Compras** oferece 20 análises (5 por domínio), 
 
 O launchpad tem um tile por aplicação. Os *intents* (`Cliente-manage`, `ItemEstoque-manage`,
 `PedidoCompra-manage`, `Reembolso-manage`, `AnaliseCompras-display`) são os mesmos dos *inbounds*
-dos manifests, o que habilita a navegação entre apps (ex.: cliente e item do pedido abrem as apps de
-Clientes e Estoque).
+dos manifests, o que habilita a navegação entre apps (seção 15.4).
 
 ### 15.2 Listas e filtros
 
@@ -733,6 +734,26 @@ Clientes e Estoque).
 - *Editar* só aparece em `ABERTO`; *Excluir* nunca aparece para o pedido registrado.
 - Side effects: trocar o cliente recarrega endereço e dados do cliente; alterar item ou quantidade
   recarrega preço, total da linha e total do pedido.
+
+### 15.4 Navegação entre aplicações
+
+Os campos abaixo viram links para o registro na app de destino (no launchpad local). A app de destino
+abre direto a Object Page pela chave semântica (`cpf` do cliente, `sku` do item, `numeroPedido` do
+pedido), enviada no contexto da navegação.
+
+| Origem | Campos com link | Destino (intent) | Parâmetro |
+|---|---|---|---|
+| Pedidos (lista e Object Page) | Cliente, CPF | Gestão de Clientes (`Cliente-manage`) | `cpfCliente` → `cpf` (`Common.SemanticObjectMapping`) |
+| Itens do pedido | Item, SKU | Gestão de Estoque (`ItemEstoque-manage`) | `skuItem` → `sku` |
+| Reembolsos (lista e Object Page) | Pedido | Pedidos de Compras (`PedidoCompra-manage`) | `numeroPedido` |
+| Reembolsos (lista e Object Page) | Cliente, CPF | Gestão de Clientes (`Cliente-manage`) | `cpfCliente` → `cpf` |
+
+- O Pedido do reembolso usa `UI.DataFieldWithIntentBasedNavigation` (link direto, sem popover):
+  como chave semântica, numa coluna comum ele seria exibido como identificador, sem link.
+- Os demais usam `Common.SemanticObject` + `Common.SemanticObjectMapping`; o CPF entra no
+  `RequestAtLeast` das listas para estar sempre no contexto.
+- No rascunho, os campos projetados pela associação não acompanham a troca de cliente ou item: os
+  handlers de `PATCH` atualizam `cpfCliente`, `cpfClienteFormatado` e `skuItem`.
 
 ---
 
@@ -861,6 +882,7 @@ Cada critério tem teste automatizado correspondente (seção 20).
 - Dada uma planilha de pedidos cuja demanda total excede o disponível, então a importação é cancelada.
 - Dado um `Comum`, quando importar clientes ou estoque, então recebe HTTP 403.
 - Os modelos de `docs/modelos-importacao` importam sem erro.
+- Dado um pedido importado com a referência P001 para um cliente, quando a mesma planilha é importada de novo, então é recusada (`o pedido P001 do cliente ... já foi importado`) e nada é gravado; outro cliente pode usar P001, e o cancelamento do pedido libera a referência.
 - As agregações `$apply` respondem nos quatro domínios, e a contagem de pedidos da análise fecha com o total de pedidos do serviço transacional.
 
 ---
@@ -1011,6 +1033,15 @@ Estrutura de cada implementação (as diferenças estão marcadas):
 | Testes | Fora do escopo inicial | 68 testes automatizados por versão |
 | Linguagem | Node.js | JavaScript e TypeScript |
 | Estrutura | `srv/handlers`, `srv/utils`, `.cdsrc.json`, `mta.yaml`, `xs-security.json` | Um serviço por app, `srv/lib`, configuração no `package.json`; MTA e XSUAA pendentes |
+
+### 22.3 Revisão 2.1
+
+| Tema | Versão 2.0 | Versão 2.1 |
+|---|---|---|
+| Campos do pedido | Dados do cliente e pagamento apareciam editáveis | Só o Cliente (na criação) e os itens são informados; dados do cliente vêm da associação; pagamento e snapshots somente leitura; observação somente leitura na tela |
+| Navegação entre apps | Cliente e item do pedido | Pedido → Cliente (Cliente, CPF) e Item (Item, SKU); Reembolso → Pedido e Cliente (Cliente, CPF), abrindo direto o registro (seção 15.4) |
+| Importação de pedidos | A mesma planilha podia ser importada várias vezes | `referenciaImportacao` (coluna Pedido) como chave de idempotência por cliente (seção 13.2) |
+| Testes | 63 por versão | 68 por versão |
 
 ---
 
