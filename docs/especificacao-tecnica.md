@@ -1,12 +1,12 @@
 # Especificação Técnica — Sistema de Pedidos de Compras (SAP CAP + SAP Fiori)
 
-> **Versão 2.1 — outubro de 2026.** Esta revisão descreve o sistema **como implementado** nas duas
+> **Versão 2.2 — outubro de 2026.** Esta revisão descreve o sistema **como implementado** nas duas
 > versões do repositório: [`nodejs-padrao`](../nodejs-padrao) (JavaScript) e
 > [`nodejs-typescript`](../nodejs-typescript) (TypeScript). As duas compartilham o mesmo modelo CDS,
 > os mesmos serviços, as mesmas aplicações SAPUI5 e a mesma suíte de testes; diferem apenas na
-> linguagem dos handlers (seção 19). A seção 22 resume o que mudou em relação à versão 1 e na
-> revisão 2.1 (campos somente leitura no pedido, navegação entre apps e importação de pedidos sem
-> duplicidade).
+> linguagem dos handlers (seção 19). A seção 22 resume o que mudou em relação à versão 1 e nas
+> revisões 2.1 (campos somente leitura no pedido, navegação entre apps e importação de pedidos sem
+> duplicidade) e 2.2 (análises em quatro apps, máscara no pagamento e navegações das Object Pages).
 
 ---
 
@@ -36,7 +36,7 @@ gateways de pagamento.
 | Banco local | SQLite em memória (`@cap-js/sqlite`), recriado a cada inicialização | Implementado |
 | Banco produtivo | SAP HANA Cloud | Pendente (seção 21) |
 | Protocolo | OData V4 com rascunho (draft), `$apply` para análises | Implementado |
-| Frontend | SAPUI5 1.148 (LTS): 4 apps Fiori Elements V4 (List Report/Object Page) + 1 app freestyle | Implementado |
+| Frontend | SAPUI5 1.148 (LTS): 4 apps Fiori Elements V4 (List Report/Object Page) + 4 apps freestyle de análise | Implementado |
 | Servidor das apps | `cds-plugin-ui5` (apps servidas pelo próprio CAP) | Implementado |
 | Portal | Launchpad local (sandbox do SAP Fiori launchpad); SAP Build Work Zone na implantação | Local implementado; Work Zone pendente |
 | Integração | ViaCEP via `fetch` nativo (URL em `cds.requires.viacep`) | Implementado |
@@ -65,7 +65,7 @@ gateways de pagamento.
 - Cancelamento com motivo; pedido pago gera solicitação de reembolso em vez de cancelar direto.
 - Gestão de reembolsos: aprovar (cancela o pedido e devolve o pagamento) ou rejeitar (retoma o pedido).
 - Importação por planilha de clientes, itens e pedidos, no modo "tudo ou nada".
-- Camada analítica somente leitura com 20 análises em app freestyle.
+- Camada analítica somente leitura com 20 análises em quatro apps freestyle (uma por domínio).
 - Controle de acesso por papel (`Admin` e `Comum`).
 - Controle de concorrência nas movimentações de estoque.
 - Testes automatizados permanentes (unidade e serviços).
@@ -367,7 +367,7 @@ Todos em OData V4, sob `/odata/v4/<caminho>`, com um serviço por aplicação.
 |---|---|---|---|---|
 | `ClientesService` | `clientes` | `Clientes` (com `cidadePrincipal`, `ufPrincipal`), `Enderecos`, `Generos`, `CepsCadastrados` | `Clientes` (+ `Enderecos`) | `definirEnderecoPrincipal` (vinculada a `Enderecos`), `importarPlanilha` |
 | `EstoqueService` | `estoque` | `Itens`, `Categorias`, `StatusEstoque` | `Itens` | `importarPlanilha` |
-| `PedidosService` | `pedidos` | `Pedidos` (com dados do cliente), `ItensPedido` (com `skuItem`, o SKU do item), `Clientes`, `ClientesAtivos`, `Enderecos`, `Itens`, `ItensAtivos`, CodeLists | `Pedidos` (+ `ItensPedido`) | `efetuarPagamento`, `aprovarPedido`, `cancelarPedido` (vinculadas), `importarPlanilha` |
+| `PedidosService` | `pedidos` | `Pedidos` (com dados do cliente e `semReembolso`), `ItensPedido` (com `skuItem`, o SKU do item), `Clientes`, `ClientesAtivos`, `Enderecos`, `Itens`, `ItensAtivos`, CodeLists | `Pedidos` (+ `ItensPedido`) | `efetuarPagamento`, `aprovarPedido`, `cancelarPedido` (vinculadas), `importarPlanilha` |
 | `ReembolsosService` | `reembolsos` | `Reembolsos` (somente leitura, com nome, `cpfCliente` e `cpfClienteFormatado` do cliente), `StatusReembolso`, `StatusPedido` | — | `aprovarReembolso`, `rejeitarReembolso` (vinculadas) |
 | `AnaliticoService` | `analitico` | `PedidosAnalise`, `ClientesAnalise`, `ItensAnalise`, `ReembolsosAnalise` (somente leitura) | — | — |
 
@@ -638,6 +638,9 @@ Todos os valores definitivos são calculados no backend; os valores enviados pel
 - Na Object Page de um pedido encerrado, as seções "Dados do Cliente" e "Itens" passam a mostrar os
   snapshots (indicadores `encerrado`/`naoEncerrado`), então alterações posteriores no cadastro não
   mudam o histórico.
+- Cada item congelado abre a Object Page *Item no encerramento do pedido* (nome, SKU, descrição,
+  categoria, quantidade, preço unitário, total e data do congelamento); cliente e item do snapshot
+  têm links para as apps de Clientes e Estoque (seção 15.4).
 
 ---
 
@@ -681,15 +684,21 @@ agregação padrão (`@Aggregation.default`) e são *custom aggregates*, então 
 | `ItensAnalise` | SKU, nome, categoria, status do estoque, ativo, moeda | `qtdeEstoque`, `qtdeReservada`, `qtdeDisponivel`, `valorEstoque`, `qtdeItens` |
 | `ReembolsosAnalise` | número, status, motivo, UF, mês da solicitação, moeda | `valorReembolso`, `qtdeReembolsos` |
 
-O app freestyle **Análises de Compras** oferece 20 análises (5 por domínio), com KPIs, gráfico
-(colunas ou rosca), tabela, filtros e detalhe:
+Cada domínio tem a sua app freestyle de análise, com barra de filtros, indicadores (KPIs), 5 gráficos
+(colunas ou rosca) e uma página de detalhe por análise (gráfico ampliado e tabela), num total de 20
+análises. O botão **Abrir gestão** navega para a app de gestão do domínio.
 
-| Domínio | Análises |
-|---|---|
-| Pedidos | valor por status; quantidade por mês; valor por UF; quantidade por status de pagamento; ticket médio por status |
-| Clientes | por gênero; por UF; por faixa de score; cadastros por mês; score médio por UF |
-| Estoque | reservado × disponível por categoria; itens por situação; valor por categoria; 10 mais reservados; itens por categoria |
-| Reembolsos | valor por status; quantidade por status; valor por mês; valor por UF; quantidade por motivo |
+| App | Visão | Indicadores | Análises | Abrir gestão |
+|---|---|---|---|---|
+| Análise de Pedidos de Compras (`analise-pedidos`) | `PedidosAnalise` | valor total, pedidos, ticket médio | valor por status; quantidade por mês; valor por UF; quantidade por status de pagamento; ticket médio por status | `PedidoCompra-manage` |
+| Análise de Clientes (`analise-clientes`) | `ClientesAnalise` | clientes, score médio | por gênero; por UF; por faixa de score; cadastros por mês; score médio por UF | `Cliente-manage` |
+| Análise de Itens do Estoque (`analise-estoque`) | `ItensAnalise` | itens, em estoque, reservada, disponível, valor em estoque | reservado × disponível por categoria; itens por situação; valor por categoria; 10 mais reservados; itens por categoria | `ItemEstoque-manage` |
+| Análise de Pedidos de Reembolsos (`analise-reembolsos`) | `ReembolsosAnalise` | reembolsos, valor | valor por status; quantidade por status; valor por mês; valor por UF; quantidade por motivo | `Reembolso-manage` |
+
+As quatro apps têm a mesma estrutura: `model/Scenarios.js` (medidas, dimensões, filtros e cenários
+do domínio), `model/AnalyticsQuery.js` (montagem do `$apply`), `service/AnalyticsService.js`,
+`control/AnalysisChart.js` e `control/FilterBar.js`, rotas do painel (padrão vazio) e do detalhe (`analise/{scenario}`), e
+testes QUnit em `webapp/test/unit`.
 
 ---
 
@@ -703,12 +712,18 @@ O app freestyle **Análises de Compras** oferece 20 análises (5 por domínio), 
 | Gestão de Estoque | Fiori Elements V4 — List Report/Object Page | `/gestaoestoque/index.html` | `EstoqueService` |
 | Pedidos de Compras | Fiori Elements V4 — List Report/Object Page | `/pedidoscompras/index.html` | `PedidosService` |
 | Gestão de Reembolsos | Fiori Elements V4 — List Report/Object Page | `/gestaoreembolsos/index.html` | `ReembolsosService` |
-| Análises de Compras | SAPUI5 freestyle | `/analisecompras/index.html` | `AnaliticoService` |
+| Análise de Pedidos de Compras | SAPUI5 freestyle | `/analisepedidos/index.html` | `AnaliticoService` |
+| Análise de Clientes | SAPUI5 freestyle | `/analiseclientes/index.html` | `AnaliticoService` |
+| Análise de Itens do Estoque | SAPUI5 freestyle | `/analiseestoque/index.html` | `AnaliticoService` |
+| Análise de Pedidos de Reembolsos | SAPUI5 freestyle | `/analisereembolsos/index.html` | `AnaliticoService` |
 | Launchpad local | Sandbox do SAP Fiori launchpad | `/launchpad.html` | — |
 
-O launchpad tem um tile por aplicação. Os *intents* (`Cliente-manage`, `ItemEstoque-manage`,
-`PedidoCompra-manage`, `Reembolso-manage`, `AnaliseCompras-display`) são os mesmos dos *inbounds*
-dos manifests, o que habilita a navegação entre apps (seção 15.4).
+O launchpad tem um tile por aplicação (oito). Os *intents* (`Cliente-manage`, `ItemEstoque-manage`,
+`PedidoCompra-manage`, `Reembolso-manage`, `AnalisePedidos-display`, `AnaliseClientes-display`,
+`AnaliseEstoque-display`, `AnaliseReembolsos-display`) são os mesmos dos *inbounds* dos manifests, o
+que habilita a navegação entre apps (seção 15.4). A configuração liga a resolução de *intents* no
+cliente (`services.NavTargetResolutionInternal.config.enableClientSideTargetResolution`): sem ela o
+shell não informa os objetos semânticos disponíveis e o Fiori Elements esconde os links.
 
 ### 15.2 Listas e filtros
 
@@ -721,8 +736,9 @@ dos manifests, o que habilita a navegação entre apps (seção 15.4).
 
 ### 15.3 Object Page do pedido
 
-- Cabeçalho com status do pedido, status do pagamento e total; botões *Efetuar Pagamento*,
-  *Aprovar pedido* e *Cancelar pedido* habilitados conforme o status (seção 8.4).
+- Cabeçalho com status do pedido, status do pagamento e total; menu *Ações* com *Efetuar
+  Pagamento*, *Aprovar pedido* e *Cancelar pedido*, habilitados conforme o status (seção 8.4). O
+  mesmo menu fica na barra da lista, para os pedidos selecionados.
 - Seções: Dados do Cliente, Dados do Pedido, Itens, Pagamento (última tentativa), Finalização
   (só `FINALIZADO`) e Cancelamento (só `CANCELADO`).
 - Pedido encerrado: Dados do Cliente e Itens vêm dos snapshots.
@@ -734,6 +750,31 @@ dos manifests, o que habilita a navegação entre apps (seção 15.4).
 - *Editar* só aparece em `ABERTO`; *Excluir* nunca aparece para o pedido registrado.
 - Side effects: trocar o cliente recarrega endereço e dados do cliente; alterar item ou quantidade
   recarrega preço, total da linha e total do pedido.
+- Pedido com solicitação de reembolso: o campo *Solicitação de reembolso* (em Dados do Pedido) abre
+  o reembolso na Gestão de Reembolsos; fica oculto quando o pedido não tem reembolso
+  (`semReembolso`, calculado na projeção do serviço).
+
+#### Diálogo *Efetuar Pagamento*
+
+O diálogo padrão de parâmetros do Fiori Elements usa campos de texto livre, sem máscara de digitação
+(`UI.InputMask` no parâmetro só formata e valida, não guia a digitação). Por isso a ação é uma ação
+customizada do manifest (`webapp/ext/EfetuarPagamento.js`) que abre um diálogo próprio:
+
+| Campo | Controle | Máscara | Enviado à action |
+|---|---|---|---|
+| Método de pagamento | `sap.m.Select` sobre `MetodosPagamento` (ordenado por `ordem`) | — | código |
+| Número do cartão | `sap.m.MaskInput` | `9999 9999 9999 9999` | só os dígitos |
+| Validade | `sap.m.MaskInput` | `99/99` (MM/AA) | `MM/AA` |
+| CVV | `sap.m.MaskInput` | `999` | só os dígitos |
+
+- O botão *Efetuar Pagamento* do diálogo só habilita com o método escolhido, todos os campos
+  completos e o mês da validade entre 01 e 12 (fora disso o campo fica em erro).
+- A confirmação chama a mesma action vinculada pelo `editFlow.invokeAction` (sem o diálogo padrão),
+  que trata mensagens, side effects e a atualização da tela. Se o backend recusar os dados, o diálogo
+  continua aberto para correção; o backend continua validando tudo (seção 9.6).
+- Na lista, a ação vale para os pedidos selecionados em `ABERTO`; na Object Page, só habilita em
+  `ABERTO`.
+- Os dados do cartão existem só nos controles do diálogo, destruído ao fechar.
 
 ### 15.4 Navegação entre aplicações
 
@@ -745,11 +786,16 @@ pedido), enviada no contexto da navegação.
 |---|---|---|---|
 | Pedidos (lista e Object Page) | Cliente, CPF | Gestão de Clientes (`Cliente-manage`) | `cpfCliente` → `cpf` (`Common.SemanticObjectMapping`) |
 | Itens do pedido | Item, SKU | Gestão de Estoque (`ItemEstoque-manage`) | `skuItem` → `sku` |
+| Object Page do pedido | Solicitação de reembolso (só com reembolso) | Gestão de Reembolsos (`Reembolso-manage`) | `numeroPedido` |
+| Pedido encerrado (snapshot do cliente) | Nome, CPF | Gestão de Clientes (`Cliente-manage`) | `cpf` |
+| Item no encerramento (snapshot do item) | Nome, SKU | Gestão de Estoque (`ItemEstoque-manage`) | `sku` |
 | Reembolsos (lista e Object Page) | Pedido | Pedidos de Compras (`PedidoCompra-manage`) | `numeroPedido` |
 | Reembolsos (lista e Object Page) | Cliente, CPF | Gestão de Clientes (`Cliente-manage`) | `cpfCliente` → `cpf` |
+| Apps de análise | Botão *Abrir gestão* | App de gestão do domínio | — |
 
-- O Pedido do reembolso usa `UI.DataFieldWithIntentBasedNavigation` (link direto, sem popover):
-  como chave semântica, numa coluna comum ele seria exibido como identificador, sem link.
+- O Pedido do reembolso e a Solicitação de reembolso do pedido usam
+  `UI.DataFieldWithIntentBasedNavigation` (link direto, sem popover): como chave semântica, numa
+  coluna comum o número seria exibido como identificador, sem link.
 - Os demais usam `Common.SemanticObject` + `Common.SemanticObjectMapping`; o CPF entra no
   `RequestAtLeast` das listas para estar sempre no contexto.
 - No rascunho, os campos projetados pela associação não acompanham a troca de cliente ou item: os
@@ -862,6 +908,7 @@ Cada critério tem teste automatizado correspondente (seção 20).
 
 ### 17.4 Pagamento, aprovação e cancelamento
 
+- Dado o diálogo *Efetuar Pagamento*, quando o cartão, a validade ou o CVV estiverem incompletos ou o mês for maior que 12, então o botão de confirmação fica desabilitado; o cartão é digitado no formato `9999 9999 9999 9999`.
 - Dado um pedido `ABERTO`, quando o pagamento for recusado (CVV 000), então continua `ABERTO`; quando aprovado, vai para `AGUARDANDO_APROVACAO`.
 - Dado qualquer tentativa, então só o resultado seguro da última é gravado e nada sensível aparece.
 - Dado um cartão expirado, então a resposta é erro de dados, não recusa.
@@ -884,6 +931,7 @@ Cada critério tem teste automatizado correspondente (seção 20).
 - Os modelos de `docs/modelos-importacao` importam sem erro.
 - Dado um pedido importado com a referência P001 para um cliente, quando a mesma planilha é importada de novo, então é recusada (`o pedido P001 do cliente ... já foi importado`) e nada é gravado; outro cliente pode usar P001, e o cancelamento do pedido libera a referência.
 - As agregações `$apply` respondem nos quatro domínios, e a contagem de pedidos da análise fecha com o total de pedidos do serviço transacional.
+- Cada app de análise mostra só o seu domínio (indicadores e 5 gráficos), abre o detalhe de cada análise e navega para a app de gestão do domínio.
 
 ---
 
@@ -916,7 +964,7 @@ O repositório mantém duas implementações completas e equivalentes da mesma a
 | Lint | ESLint (recomendado do CAP) | ESLint + `typescript-eslint` + `tsc --noEmit` |
 | Build | `cds build` copia os `.js` | `cds build` compila com `tsc` (`tsconfig.cdsbuild.json`) para `gen/srv` |
 | Gerador de dados | `scripts/gerar-dados-demo.js` | `scripts/gerar-dados-demo.ts` (gera os mesmos CSVs) |
-| Modelo CDS, apps, dados, i18n | — | Idênticos |
+| Modelo CDS, apps (inclusive `webapp/ext` e testes QUnit), dados, i18n | — | Idênticos |
 
 Regra de manutenção: qualquer mudança de regra de negócio deve ser feita nas duas versões, com o
 teste correspondente nas duas suítes.
@@ -950,6 +998,10 @@ rede externa) e um gerador de `.xlsx` mínimo. São permanentes, como a suíte A
 | `importacao.test` | Clientes, estoque e pedidos (tudo ou nada), reimportação de pedidos recusada e modelos de `docs/` | testes de `ZCL_PC_IMPORTACAO` |
 | `analitico.test` | Agregações `$apply` dos quatro domínios | — |
 
+As apps de análise têm testes **QUnit** (`app/analise-*/webapp/test/unit`) do catálogo de cenários
+(`Scenarios`) e da montagem das consultas (`AnalyticsQuery`), abertos no navegador com o servidor em
+execução: `/<app>/test/testsuite.qunit.html` (ex.: `/analisepedidos/test/testsuite.qunit.html`).
+
 ---
 
 ## 21. Estrutura do Repositório
@@ -973,9 +1025,12 @@ Estrutura de cada implementação (as diferenças estão marcadas):
 │   ├── services.cds                  reúne as anotações das apps
 │   ├── gestao-clientes/              Fiori Elements (annotations.cds + webapp/, com webapp/ext/ImportarPlanilha.js)
 │   ├── gestao-estoque/               Fiori Elements (+ importação)
-│   ├── pedidos-compras/              Fiori Elements (+ importação)
+│   ├── pedidos-compras/              Fiori Elements (+ importação e webapp/ext/EfetuarPagamento.js)
 │   ├── gestao-reembolsos/            Fiori Elements
-│   ├── analise-compras/              SAPUI5 freestyle (20 análises)
+│   ├── analise-pedidos/              SAPUI5 freestyle: Análise de Pedidos de Compras
+│   ├── analise-clientes/             SAPUI5 freestyle: Análise de Clientes
+│   ├── analise-estoque/              SAPUI5 freestyle: Análise de Itens do Estoque
+│   ├── analise-reembolsos/           SAPUI5 freestyle: Análise de Pedidos de Reembolsos
 │   ├── launchpad.html                sandbox do Fiori launchpad
 │   └── launchpad/                    configuração e inicialização do launchpad
 ├── db/
@@ -1028,7 +1083,7 @@ Estrutura de cada implementação (as diferenças estão marcadas):
 | Itens | Peso e dimensões | Não modelados |
 | Endereço | `enderecoPrincipal` (Boolean) | `principal`, `cepGeral`, `cepStatus`, CEP geral e reaproveitamento de CEP |
 | Papéis | `PedidosCompras.Comum`/`PedidosCompras.Admin`, usuários `Comum`/`Admin` | Papéis `Comum`/`Admin`, usuários `comum`/`admin` |
-| Interface | App única com navegação interna | 5 apps independentes + launchpad com navegação entre elas |
+| Interface | App única com navegação interna | 8 apps independentes (4 de gestão, 4 de análise) + launchpad com navegação entre elas |
 | Novos recursos | — | Reembolsos, importação por planilha, camada analítica, dados de demonstração |
 | Testes | Fora do escopo inicial | 68 testes automatizados por versão |
 | Linguagem | Node.js | JavaScript e TypeScript |
@@ -1042,6 +1097,16 @@ Estrutura de cada implementação (as diferenças estão marcadas):
 | Navegação entre apps | Cliente e item do pedido | Pedido → Cliente (Cliente, CPF) e Item (Item, SKU); Reembolso → Pedido e Cliente (Cliente, CPF), abrindo direto o registro (seção 15.4) |
 | Importação de pedidos | A mesma planilha podia ser importada várias vezes | `referenciaImportacao` (coluna Pedido) como chave de idempotência por cliente (seção 13.2) |
 | Testes | 63 por versão | 68 por versão |
+
+### 22.4 Revisão 2.2
+
+| Tema | Versão 2.1 | Versão 2.2 |
+|---|---|---|
+| Análises | Uma app (`analise-compras`) com seletor de domínio | Quatro apps, uma por domínio, cada uma com o seu tile e o botão *Abrir gestão* (seção 14) |
+| Testes QUnit das análises | Desatualizados (nomes de campo antigos) | Reescritos por domínio, todos passando |
+| Efetuar Pagamento | Diálogo padrão do Fiori Elements, sem máscara | Diálogo próprio com máscara no cartão, validade e CVV (seção 15.3) |
+| Object Pages | Item histórico sem conteúdo; snapshots e reembolso sem link | Object Page do item no encerramento; links do snapshot do cliente e dos itens; link do pedido para o reembolso (seção 15.4) |
+| Launchpad | Cinco tiles; links por objeto semântico podiam não aparecer | Oito tiles; resolução de *intents* no cliente ligada |
 
 ---
 
