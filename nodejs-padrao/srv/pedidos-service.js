@@ -52,6 +52,10 @@ export default class PedidosService extends cds.ApplicationService {
       const endereco = await enderecoPrincipal(req.data.cliente_ID)
       req.data.endereco_ID = endereco?.ID ?? null
       req.data.enderecoPrincipalCompleto = endereco?.completo ?? null
+      // O rascunho guarda o CPF lido da associação: acompanha o cliente escolhido
+      const cliente = req.data.cliente_ID && await SELECT.one.from(db.Clientes, req.data.cliente_ID).columns('cpf', 'cpfFormatado')
+      req.data.cpfCliente = cliente?.cpf ?? null
+      req.data.cpfClienteFormatado = cliente?.cpfFormatado ?? null
       if (req.data.cliente_ID && !endereco) aviso(req, 'CLIENTE_SEM_ENDERECO_PRINCIPAL', {}, 'cliente_ID')
     })
 
@@ -67,8 +71,9 @@ export default class PedidosService extends cds.ApplicationService {
       const itemID = 'item_ID' in req.data ? req.data.item_ID : linha?.item_ID
       const qtde = Number('qtdeItemPedido' in req.data ? req.data.qtdeItemPedido : linha?.qtdeItemPedido) || 0
       let preco = 0
+      let item
       if (itemID) {
-        const item = await SELECT.one.from(db.Itens, itemID).columns('sku', 'precoUnitario', 'currency_code', 'qtdeDisponivel')
+        item = await SELECT.one.from(db.Itens, itemID).columns('sku', 'precoUnitario', 'currency_code', 'qtdeDisponivel')
         const jaNoPedido = linha?.pedido_ID ? (await reservaAtual(linha.pedido_ID)).has(itemID) : false
         if ('item_ID' in req.data && item && item.qtdeDisponivel <= 0 && !jaNoPedido) {
           return rejeitar(req, 409, 'ITEM_SEM_ESTOQUE', { sku: item.sku }, 'item_ID')
@@ -78,6 +83,8 @@ export default class PedidosService extends cds.ApplicationService {
         preco = Number(fixado?.precoUnitarioSnapshot ?? item?.precoUnitario ?? 0)
         req.data.currency_code = item?.currency_code ?? MOEDA_PADRAO
       }
+      // O rascunho guarda o SKU lido da associação: acompanha o item escolhido
+      if ('item_ID' in req.data) req.data.skuItem = item?.sku ?? null
       req.data.precoUnitarioSnapshot = preco
       req.data.valorTotal = arredondar(qtde * preco)
     })

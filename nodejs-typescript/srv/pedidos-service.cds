@@ -75,6 +75,12 @@ service PedidosService {
         @mandatory motivoCancelamento : String(500)) returns Pedidos;
     };
 
+  /** Itens do pedido; o SKU vem do item (navegação para a Gestão de Estoque). */
+  entity ItensPedido             as projection on db.ItensPedido {
+    *,
+    item.sku as skuItem
+  };
+
   /** Clientes (somente leitura): textos e value help do pedido. */
   @readonly
   entity Clientes                as projection on db.Clientes {
@@ -160,6 +166,10 @@ annotate PedidosService.Pedidos with {
   telefoneCliente       @Core.Computed  @mandatory: false;
   generoCliente         @Core.Computed  @mandatory: false;
   dataNascimentoCliente @Core.Computed  @mandatory: false;
+};
+
+annotate PedidosService.ItensPedido with {
+  skuItem @Core.Computed;
 };
 
 annotate PedidosService.Pagamentos with @readonly {
