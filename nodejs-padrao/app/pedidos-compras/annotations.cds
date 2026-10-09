@@ -53,10 +53,7 @@ annotate service.Pedidos with @(
       Value            : numeroPedido,
       ![@UI.Importance]: #High
     },
-    {
-      Value: cliente.cpfFormatado,
-      Label: 'CPF'
-    },
+    {Value: cpfCliente},
     {
       Value            : cliente_ID,
       Label            : 'Cliente',
@@ -84,7 +81,9 @@ annotate service.Pedidos with @(
       Property  : createdAt,
       Descending: true
     }],
-    Visualizations: ['@UI.LineItem']
+    Visualizations: ['@UI.LineItem'],
+    // CPF sempre carregado: é o parâmetro da navegação para o cliente
+    RequestAtLeast: [cpfCliente]
   },
   UI.Identification               : [{
     $Type  : 'UI.DataFieldForActionGroup',
@@ -201,10 +200,7 @@ annotate service.Pedidos with @(
   UI.FieldGroup #Cliente          : {Data: [
     // Só o cliente é informado; os demais dados vêm da associação (somente leitura)
     {Value: cliente_ID},
-    {
-      Value: cliente.cpfFormatado,
-      Label: 'CPF'
-    },
+    {Value: cpfCliente},
     {
       Value: cliente.email,
       Label: 'E-mail'
@@ -252,17 +248,24 @@ annotate service.Pedidos with @(
     SourceProperties: [cliente_ID],
     TargetProperties: [
       'endereco_ID',
-      'enderecoPrincipalCompleto'
+      'enderecoPrincipalCompleto',
+      'cpfCliente',
+      'cpfClienteFormatado'
     ],
     TargetEntities  : [cliente]
   }
 ) {
-  // O cliente é escolhido na criação (obrigatório); depois do registro fica somente leitura
+  // O cliente é escolhido na criação (obrigatório); depois do registro fica somente leitura.
+  // Cliente e CPF abrem o cliente na Gestão de Clientes (chave semântica: cpf)
   cliente               @Common.FieldControl: (case when numeroPedido is null then 7 else 1 end)  @Common: {
-    Text           : cliente.nome,
-    TextArrangement: #TextOnly,
-    SemanticObject : 'Cliente',
-    ValueList      : {
+    Text                 : cliente.nome,
+    TextArrangement      : #TextOnly,
+    SemanticObject       : 'Cliente',
+    SemanticObjectMapping: [{
+      LocalProperty         : cpfCliente,
+      SemanticObjectProperty: 'cpf'
+    }],
+    ValueList            : {
       Label         : 'Clientes ativos',
       CollectionPath: 'ClientesAtivos',
       Parameters    : [
@@ -301,7 +304,15 @@ annotate service.Pedidos with @(
   statusPedido          @Common.ValueListWithFixedValues;
   statusPagamento       @Common.ValueListWithFixedValues;
   nomeCliente           @title: 'Cliente'  @Common.SemanticObject: 'Cliente';
-  cpfCliente            @title: 'CPF';
+  cpfCliente            @title: 'CPF'  @Common: {
+    Text                 : cpfClienteFormatado,
+    TextArrangement      : #TextOnly,
+    SemanticObject       : 'Cliente',
+    SemanticObjectMapping: [{
+      LocalProperty         : cpfCliente,
+      SemanticObjectProperty: 'cpf'
+    }]
+  };
   cpfClienteFormatado   @title: 'CPF';
   emailCliente          @title: 'E-mail';
   telefoneCliente       @title: 'Telefone';
@@ -346,10 +357,7 @@ annotate service.ItensPedido with @(
       Value            : item_ID,
       ![@UI.Importance]: #High
     },
-    {
-      Value: item.sku,
-      Label: 'SKU'
-    },
+    {Value: skuItem},
     {
       Value: item.qtdeDisponivel,
       Label: 'Disponível agora'
@@ -372,10 +380,7 @@ annotate service.ItensPedido with @(
   }],
   UI.FieldGroup #Item   : {Data: [
     {Value: item_ID},
-    {
-      Value: item.sku,
-      Label: 'SKU'
-    },
+    {Value: skuItem},
     {
       Value: item.qtdeDisponivel,
       Label: 'Qtde disponível agora (informativo)'
@@ -392,6 +397,7 @@ annotate service.ItensPedido with @(
       qtdeItemPedido
     ],
     TargetProperties: [
+      'skuItem',
       'precoUnitarioSnapshot',
       'valorTotal',
       'currency_code',
@@ -399,11 +405,16 @@ annotate service.ItensPedido with @(
     ]
   }
 ) {
-  item @Common: {
-    Text           : item.nome,
-    TextArrangement: #TextOnly,
-    SemanticObject : 'ItemEstoque',
-    ValueList      : {
+  // Item e SKU abrem o item na Gestão de Estoque (chave semântica: sku)
+  item    @Common: {
+    Text                 : item.nome,
+    TextArrangement      : #TextOnly,
+    SemanticObject       : 'ItemEstoque',
+    SemanticObjectMapping: [{
+      LocalProperty         : skuItem,
+      SemanticObjectProperty: 'sku'
+    }],
+    ValueList            : {
       Label         : 'Itens ativos',
       CollectionPath: 'ItensAtivos',
       Parameters    : [
@@ -434,6 +445,13 @@ annotate service.ItensPedido with @(
         }
       ]
     }
+  };
+  skuItem @Common: {
+    SemanticObject       : 'ItemEstoque',
+    SemanticObjectMapping: [{
+      LocalProperty         : skuItem,
+      SemanticObjectProperty: 'sku'
+    }]
   };
 };
 
