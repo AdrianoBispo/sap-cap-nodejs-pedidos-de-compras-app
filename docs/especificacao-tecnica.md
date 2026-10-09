@@ -40,7 +40,7 @@ gateways de pagamento.
 | Integração | ViaCEP via `fetch` nativo (URL em `cds.requires.viacep`) | Implementado |
 | Segurança | Autenticação *mocked* com papéis `Admin`/`Comum`; XSUAA na implantação | Mocked implementado; XSUAA pendente |
 | Deploy | Cloud Foundry / MTA (`mta.yaml`) | Pendente |
-| Qualidade | `node:test` + `@cap-js/cds-test` (66 testes por versão), ESLint 10 | Implementado |
+| Qualidade | `node:test` + `@cap-js/cds-test` (68 testes por versão), ESLint 10 | Implementado |
 
 ---
 
@@ -265,6 +265,7 @@ usam `cuid` (chave `ID` UUID) e `managed` (`createdAt`, `createdBy`, `modifiedAt
 | `statusPedido` | `Association to StatusPedido` | Ciclo de vida (seção 8) |
 | `statusPagamento` | `Association to StatusPagamento` | Réplica do status do pagamento para lista e filtros |
 | `observacao` | `String(500)` | Somente leitura na tela; preenchida na importação por planilha |
+| `referenciaImportacao` | `String(40)` | Referência da planilha (coluna Pedido), gravada só pela importação; somente leitura |
 | `currency`, `valorTotal` | `Currency default 'BRL'`, `Valor default 0` | Total calculado pelo backend |
 | `dataFinalizacao` | `Timestamp` | Preenchida na aprovação |
 | `motivoCancelamento`, `dataCancelamento`, `canceladoPor` | `String(500)`, `Timestamp`, `User` | Preenchidos no cancelamento |
@@ -661,7 +662,7 @@ Botão **Importar planilha** nas listas de Clientes, Estoque e Pedidos (extensã
 |---|---|---|---|
 | Clientes (`Admin`) | CPF, Nome, E-mail, Telefone, Data de nascimento, CEP, Número | Gênero, Complemento | Um cliente por linha com o endereço principal; CPF sem zeros à esquerda é completado; CEP com 5–7 dígitos é completado; data `AAAA-MM-DD`, `DD/MM/AAAA` ou data do Excel; gênero pelo código ou pelo texto; CPF repetido na planilha ou já cadastrado é erro |
 | Estoque (`Admin`) | Nome, Categoria, Quantidade em estoque, Preço unitário | Descrição, Moeda (padrão BRL) | Item criado ativo com SKU; nome já cadastrado ou repetido é erro (evita duplicar estoque ao reenviar); preço aceita `1.234,56`, `1234.56` e `R$` |
-| Pedidos (`Comum`/`Admin`) | Pedido (referência), CPF, SKU, Quantidade | Observação | Linhas com a mesma referência formam um pedido; cliente ativo com endereço principal; itens ativos; o disponível precisa cobrir a soma da planilha inteira; cada pedido nasce `ABERTO` com reserva |
+| Pedidos (`Comum`/`Admin`) | Pedido (referência), CPF, SKU, Quantidade | Observação | Linhas com a mesma referência formam um pedido; cliente ativo com endereço principal; itens ativos; o disponível precisa cobrir a soma da planilha inteira; cada pedido nasce `ABERTO` com reserva; a referência é gravada no pedido e a mesma referência para o mesmo cliente é recusada enquanto houver pedido não cancelado com ela (reenviar a planilha não duplica pedidos); referência com até 40 caracteres |
 
 ---
 
@@ -914,7 +915,7 @@ teste correspondente nas duas suítes.
 
 ## 20. Testes Automatizados
 
-66 testes por versão (`node:test` + `@cap-js/cds-test`), com um servidor ViaCEP falso local (sem
+68 testes por versão (`node:test` + `@cap-js/cds-test`), com um servidor ViaCEP falso local (sem
 rede externa) e um gerador de `.xlsx` mínimo. São permanentes, como a suíte ABAP Unit do RAP.
 
 | Arquivo | Cobertura | Classes de teste RAP equivalentes |
@@ -924,7 +925,7 @@ rede externa) e um gerador de `.xlsx` mínimo. São permanentes, como a suíte A
 | `estoque.test` | SKU, disponibilidade e status, concorrência com edição, inativação e exclusão | `ltcl_sku_item` |
 | `pedidos.test` | Registro com reserva, edição pela diferença, pagamento, aprovação, cancelamento, reembolso, campos somente leitura (cliente e pagamento) | `ltcl_registro_pedido`, `ltcl_edicao_pedido`, `ltcl_ciclo_pedido` |
 | `reembolsos.test` | Aprovar, rejeitar (motivo obrigatório), decisão única | `ltcl_reembolso` |
-| `importacao.test` | Clientes, estoque e pedidos (tudo ou nada) e modelos de `docs/` | testes de `ZCL_PC_IMPORTACAO` |
+| `importacao.test` | Clientes, estoque e pedidos (tudo ou nada), reimportação de pedidos recusada e modelos de `docs/` | testes de `ZCL_PC_IMPORTACAO` |
 | `analitico.test` | Agregações `$apply` dos quatro domínios | — |
 
 ---
@@ -1007,7 +1008,7 @@ Estrutura de cada implementação (as diferenças estão marcadas):
 | Papéis | `PedidosCompras.Comum`/`PedidosCompras.Admin`, usuários `Comum`/`Admin` | Papéis `Comum`/`Admin`, usuários `comum`/`admin` |
 | Interface | App única com navegação interna | 5 apps independentes + launchpad com navegação entre elas |
 | Novos recursos | — | Reembolsos, importação por planilha, camada analítica, dados de demonstração |
-| Testes | Fora do escopo inicial | 66 testes automatizados por versão |
+| Testes | Fora do escopo inicial | 68 testes automatizados por versão |
 | Linguagem | Node.js | JavaScript e TypeScript |
 | Estrutura | `srv/handlers`, `srv/utils`, `.cdsrc.json`, `mta.yaml`, `xs-security.json` | Um serviço por app, `srv/lib`, configuração no `package.json`; MTA e XSUAA pendentes |
 

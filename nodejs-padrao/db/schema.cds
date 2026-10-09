@@ -193,6 +193,11 @@ entity Pedidos : cuid, managed {
   /** Réplica do status do pagamento, para lista e filtros. */
   statusPagamento           : Association to StatusPagamento;
   observacao                : String(500);
+  /**
+   * Referência do pedido na planilha importada (coluna Pedido). Gravada só
+   * pela importação; impede reimportar o mesmo pedido para o mesmo cliente.
+   */
+  referenciaImportacao      : String(40);
   currency                  : Currency default 'BRL';
   valorTotal                : Valor default 0;
   dataFinalizacao           : Timestamp;

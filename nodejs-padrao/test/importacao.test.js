@@ -96,6 +96,43 @@ describe('importação por planilha', () => {
     assert.match(JSON.stringify(erro), /Estoque insuficiente para o item/)
   })
 
+  it('pedidos: a mesma referência não é reimportada para o mesmo cliente', async () => {
+    const { data: clientes } = await api.get(`/odata/v4/pedidos/ClientesAtivos?$top=2&$skip=2&$orderby=cpf`)
+    const { data: itens } = await api.get(`/odata/v4/pedidos/ItensAtivos?$filter=qtdeDisponivel ge 10&$top=1&$orderby=sku desc`)
+    const [a, b] = clientes.value
+    const planilha = cpf => csv([['Pedido', 'CPF', 'SKU', 'Quantidade'], ['dup-1', cpf, itens.value[0].sku, '1']])
+
+    assert.equal((await importar('pedidos', planilha(a.cpf))).data.registrosCriados, 1)
+    const { data: criados } = await api.get(`/odata/v4/pedidos/Pedidos?$filter=referenciaImportacao eq 'DUP-1'&$select=ID,numeroPedido`)
+    assert.equal(criados.value.length, 1, 'a referência é gravada em maiúsculas')
+    const [pedido] = criados.value
+
+    const repetido = await falha(importar('pedidos', planilha(a.cpf)))
+    assert.match(JSON.stringify(repetido), new RegExp(`Linha 2: o pedido DUP-1 do cliente .+ já foi importado \\(pedido ${pedido.numeroPedido}\\)`))
+
+    // Outro cliente pode usar a mesma referência
+    assert.equal((await importar('pedidos', planilha(b.cpf))).data.registrosCriados, 1)
+    // Pedido cancelado libera a referência
+    await api.post(`/odata/v4/pedidos/Pedidos${api.chave(pedido.ID)}/PedidosService.cancelarPedido`, { motivoCancelamento: 'Importado por engano' })
+    assert.equal((await importar('pedidos', planilha(a.cpf))).data.registrosCriados, 1)
+  })
+
+  it('pedidos: a referência é somente leitura e limitada a 40 caracteres', async () => {
+    const { data: clientes } = await api.get(`/odata/v4/pedidos/ClientesAtivos?$top=1`)
+    const erro = await falha(importar('pedidos', csv([
+      ['Pedido', 'CPF', 'SKU', 'Quantidade'],
+      ['R'.repeat(41), clientes.value[0].cpf, 'SKU-X', '1']
+    ])))
+    assert.match(JSON.stringify(erro), /Linha 2: Pedido \(referência\) excede 40 caracteres/)
+
+    const { data: pedidos } = await api.get(`/odata/v4/pedidos/Pedidos?$filter=referenciaImportacao ne null and statusPedido_code eq 'ABERTO'&$top=1&$select=ID,referenciaImportacao`)
+    const [pedido] = pedidos.value
+    await api.editar('/odata/v4/pedidos', 'Pedidos', pedido.ID)
+    await api.patch(`/odata/v4/pedidos/Pedidos${api.chave(pedido.ID, false)}`, { referenciaImportacao: 'OUTRA' })
+    const ativo = await api.ativar('/odata/v4/pedidos', 'Pedidos', pedido.ID)
+    assert.equal(ativo.referenciaImportacao, pedido.referenciaImportacao)
+  })
+
   it('clientes e estoque exigem o perfil administrador', async () => {
     assert.equal((await falha(importar('clientes', csv([['CPF']]), COMUM))).status, 403)
     assert.equal((await falha(importar('estoque', csv([['Nome']]), COMUM))).status, 403)
@@ -107,5 +144,8 @@ describe('importação por planilha', () => {
     assert.equal((await importar('clientes', modelo('clientes'))).data.registrosCriados, 3)
     assert.equal((await importar('estoque', modelo('estoque'))).data.registrosCriados, 3)
     assert.equal((await importar('pedidos', modelo('pedidos'))).data.registrosCriados, 2)
+    // Reenviar o mesmo modelo de pedidos não duplica os pedidos
+    const repetido = await falha(importar('pedidos', modelo('pedidos')))
+    assert.match(JSON.stringify(repetido), /o pedido P001 do cliente .+ já foi importado/)
   })
 })

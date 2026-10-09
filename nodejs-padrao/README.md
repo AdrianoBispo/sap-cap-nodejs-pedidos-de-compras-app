@@ -29,7 +29,7 @@ freestyle) servidas pelo próprio CAP.
 | Serviços | OData V4 com rascunho (draft), `@restrict`, `@assert`/`@mandatory`, `$apply` |
 | Front-end | SAPUI5 1.148 (LTS): Fiori Elements V4 (List Report/Object Page) e app freestyle, `cds-plugin-ui5` |
 | Integração | ViaCEP (`fetch` nativo, URL em `cds.requires.viacep`) |
-| Qualidade | `node:test` + `@cap-js/cds-test` (66 testes), ESLint 10, UI5 linter |
+| Qualidade | `node:test` + `@cap-js/cds-test` (68 testes), ESLint 10, UI5 linter |
 
 ## Como executar
 
@@ -52,7 +52,7 @@ O banco é recriado a cada inicialização com os dados de demonstração de `db
 ## Testes e lint
 
 ```sh
-npm test             # 66 testes (unidade + serviços), com ViaCEP falso local
+npm test             # 68 testes (unidade + serviços), com ViaCEP falso local
 npm run lint         # ESLint (configuração recomendada do CAP)
 ```
 
@@ -66,7 +66,7 @@ junto com as regras de negócio.
 | `test/estoque.test.js` | SKU, disponibilidade e status, concorrência com edição, inativação e exclusão |
 | `test/pedidos.test.js` | registro com reserva, edição pela diferença, pagamento, aprovação, cancelamento, reembolso, campos somente leitura |
 | `test/reembolsos.test.js` | aprovar, rejeitar (motivo obrigatório), decisão única |
-| `test/importacao.test.js` | importação de clientes, estoque e pedidos (tudo ou nada) e dos modelos em `docs/` |
+| `test/importacao.test.js` | importação de clientes, estoque e pedidos (tudo ou nada), reimportação de pedidos recusada e dos modelos em `docs/` |
 | `test/analitico.test.js` | agregações `$apply` dos quatro domínios |
 
 ## Estrutura
@@ -115,7 +115,8 @@ nodejs-padrao/
   (motivo obrigatório) devolve o pedido ao status anterior.
 - **Concorrência**: cada movimento de estoque é um `UPDATE` condicional atômico ("só reserva se o
   saldo atual cobre a quantidade"); qualquer erro desfaz a transação inteira.
-- **Importação por planilha** (`.xlsx`/`.csv`) em Clientes, Estoque e Pedidos, tudo ou nada; modelos
+- **Importação por planilha** (`.xlsx`/`.csv`) em Clientes, Estoque e Pedidos, tudo ou nada; a
+  referência do pedido (coluna Pedido) não é reimportada para o mesmo cliente; modelos
   em [`../docs/modelos-importacao`](../docs/modelos-importacao).
 
 ## Diferenças em relação ao RAP

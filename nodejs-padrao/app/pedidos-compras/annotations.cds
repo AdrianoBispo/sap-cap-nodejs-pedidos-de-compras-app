@@ -230,6 +230,7 @@ annotate service.Pedidos with @(
       Criticality: statusPagamento.criticality
     },
     {Value: observacao},
+    {Value: referenciaImportacao},
     {Value: valorTotal},
     {Value: createdAt},
     {Value: createdBy},

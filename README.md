@@ -18,7 +18,7 @@
   <img src="https://img.shields.io/badge/SQLite-dev-003B57?style=for-the-badge&logo=sqlite&logoColor=white" alt="SQLite">
   <img src="https://img.shields.io/badge/API-ViaCEP-2E7D32?style=for-the-badge" alt="API ViaCEP">
   <br>
-  <img src="https://img.shields.io/badge/testes-66%20por%20vers%C3%A3o-9C3493?style=for-the-badge" alt="66 testes por versão">
+  <img src="https://img.shields.io/badge/testes-68%20por%20vers%C3%A3o-9C3493?style=for-the-badge" alt="68 testes por versão">
   <img src="https://img.shields.io/badge/ESLint-10-4B32C3?style=for-the-badge&logo=eslint&logoColor=white" alt="ESLint 10">
   <img src="https://img.shields.io/github/last-commit/AdrianoBispo/sap-cap-nodejs-pedidos-de-compras-app?style=for-the-badge" alt="Último commit">
   <img src="https://img.shields.io/github/repo-size/AdrianoBispo/sap-cap-nodejs-pedidos-de-compras-app?style=for-the-badge" alt="Tamanho do repositório">
@@ -154,7 +154,7 @@ regras de domínio, dos testes e dos scripts.
 | Front-end | SAPUI5 1.148 (LTS): Fiori Elements V4 (List Report + Object Page) e app freestyle, servidos pelo `cds-plugin-ui5` |
 | Integração | ViaCEP via `fetch` nativo (URL em `cds.requires.viacep`) |
 | Ferramentas | `@sap/cds-dk` 10, SAP Fiori tools (geração das apps), UI5 linter, ESLint 10, `local-ssl-proxy` (HTTPS local) |
-| Testes | `node:test` + `@cap-js/cds-test` (66 testes por versão), ViaCEP falso local |
+| Testes | `node:test` + `@cap-js/cds-test` (68 testes por versão), ViaCEP falso local |
 
 ---
 
@@ -326,7 +326,7 @@ Autenticação *mocked* do CAP:
 | Script | JavaScript | TypeScript |
 | --- | --- | --- |
 | `npm run watch` | `cds watch` | `cds-tsx watch` (executa os `.ts` com `tsx`) |
-| `npm test` | 66 testes (`node --test`) | `typer` + 66 testes (`node --import tsx --test`) |
+| `npm test` | 68 testes (`node --test`) | `typer` + 68 testes (`node --import tsx --test`) |
 | `npm run lint` | ESLint | ESLint + `typecheck` |
 | `npm run typecheck` | — | `cds-typer` + `tsc --noEmit` |
 | `npm run build` | — | `cds build --production` (JavaScript em `gen/srv`) |
@@ -393,7 +393,7 @@ npm test         # em nodejs-padrao ou nodejs-typescript
 
 Os testes sobem o servidor com `cds.test`, usam um **ViaCEP falso local** (sem rede externa) e um
 gerador mínimo de `.xlsx`. **São permanentes**, como a suíte ABAP Unit do RAP: devem ser mantidos e
-ajustados junto com as regras de negócio. São 66 testes por versão, todos passando:
+ajustados junto com as regras de negócio. São 68 testes por versão, todos passando:
 
 | Arquivo | Cobre | Classes de teste RAP equivalentes |
 | --- | --- | --- |
@@ -402,7 +402,7 @@ ajustados junto com as regras de negócio. São 66 testes por versão, todos pas
 | `estoque.test` | SKU, disponibilidade e status, concorrência com edição, inativação e exclusão | `ltcl_sku_item` |
 | `pedidos.test` | Registro com reserva, edição pela diferença, pagamento, aprovação, cancelamento, reembolso, campos somente leitura | `ltcl_registro_pedido`, `ltcl_edicao_pedido`, `ltcl_ciclo_pedido` |
 | `reembolsos.test` | Aprovar, rejeitar (motivo obrigatório), decisão única | `ltcl_reembolso` |
-| `importacao.test` | Clientes, estoque e pedidos (tudo ou nada) e os modelos de `docs/modelos-importacao` | `ZCL_PC_IMPORTACAO` |
+| `importacao.test` | Clientes, estoque e pedidos (tudo ou nada), reimportação de pedidos recusada e os modelos de `docs/modelos-importacao` | `ZCL_PC_IMPORTACAO` |
 | `analitico.test` | Agregações `$apply` dos quatro domínios | — |
 
 Os testes rodam sem o `cds-plugin-ui5` (`CDS_PLUGIN_UI5_ACTIVE=false`), porque exercitam só o backend.
@@ -422,6 +422,7 @@ resto é preenchido automaticamente:
 | Preço unitário e total de cada item | Backend: preço do estoque no rascunho; preço fixado no registro |
 | Pagamento (método, status, bandeira, cartão mascarado, autorização, mensagem, data) | Só a ação *Efetuar Pagamento* (`Pagamentos` é `@readonly` no serviço) |
 | Observação | Somente leitura na tela; preenchida pela importação por planilha |
+| Referência de importação | Coluna Pedido da planilha; gravada só pela importação (impede reimportar o mesmo pedido) |
 
 Depois do registro o cliente fica somente leitura (`Common.FieldControl` por expressão) e, no
 servidor, a troca é recusada (`PEDIDO_CLIENTE_IMUTAVEL`). Campos mantidos pelo backend que chegam
@@ -513,6 +514,12 @@ os registros de uma vez. Modelos prontos estão em [`docs/modelos-importacao/`](
   e lista o motivo por linha (no máximo 15, mais o total omitido).
 - A criação passa pelo próprio serviço, então valem as mesmas regras da tela (CPF, ViaCEP, SKU,
   número do pedido, reserva de estoque).
+- **Sem duplicidade**: clientes (CPF) e itens (nome) já cadastrados são recusados. Nos pedidos, a
+  coluna **Pedido** é gravada como *Referência de importação* (somente leitura, até 40 caracteres) e
+  funciona como chave de idempotência: a mesma referência para o mesmo cliente é recusada enquanto
+  houver pedido não cancelado com ela (`Linha 2: o pedido P001 do cliente 100.003.571-97 já foi
+  importado (pedido 0000000101).`). Reenviar a mesma planilha não cria pedidos repetidos; outro
+  cliente pode usar a mesma referência, e um pedido cancelado a libera.
 - Clientes e Estoque exigem o papel `Admin`; Pedidos, `Comum` ou `Admin`.
 
 ---
@@ -583,6 +590,7 @@ num total de 20 análises, e uma página de detalhe por análise.
 
 | Versão | Mudanças |
 | --- | --- |
+| v1.3 | Importação de pedidos sem duplicidade: a coluna Pedido vira a *Referência de importação* do pedido, e a mesma referência para o mesmo cliente é recusada enquanto houver pedido não cancelado com ela; 68 testes por versão |
 | v1.2 | Correção no pedido: só o cliente (na criação) e os itens são informados; dados do cliente lidos pela associação e somente leitura (antes apareciam editáveis e obrigatórios e ficavam vazios no rascunho); pagamento e snapshots somente leitura, gravados só pelas ações; observação somente leitura na tela; testes de regressão (66 por versão); README principal no modelo do projeto RAP |
 | v1.1 | Versão TypeScript (`nodejs-typescript`, `cds-typer`, `tsx`); especificação técnica 2.0 (.md e .docx); proxy HTTPS local (`npm run https`) |
 | v1.0 | Versão JavaScript (`nodejs-padrao`): modelo, serviços, regras de negócio, cinco apps SAPUI5, launchpad local, importação por planilha, camada analítica, dados de demonstração e suíte de testes |
