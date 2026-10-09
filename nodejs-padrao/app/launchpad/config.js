@@ -1,7 +1,8 @@
 /*
  * Configuração do launchpad local (sandbox do SAP Fiori launchpad): um tile
- * por aplicação (quatro de gestão, Pedidos de Compras e quatro de análise). Os intents (objeto semântico + ação) são os mesmos dos
- * inbounds dos manifests, o que habilita a navegação entre as aplicações
+ * por aplicação, quatro de gestão (Clientes, Estoque, Pedidos de Compras e
+ * Reembolsos) e quatro de análise. Os intents (objeto semântico + ação) são
+ * os mesmos dos inbounds dos manifests, o que habilita a navegação entre as aplicações
  * (ex.: cliente e item do pedido abrem as apps de Clientes e Estoque).
  *
  * A resolução de intents no cliente (ClientSideTargetResolution) precisa estar

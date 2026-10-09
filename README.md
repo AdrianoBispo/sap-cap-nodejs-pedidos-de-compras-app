@@ -1,9 +1,10 @@
 <h1 align="center">Pedidos de Compras – SAP CAP / Node.js</h1>
 
 <p align="center">
-  Cinco aplicações SAPUI5 — <b>Gestão de Clientes</b>, <b>Gestão de Estoque</b>, <b>Pedidos de Compras</b>,
-  <b>Gestão de Reembolsos</b> e <b>Análises de Compras</b> — com backend em <b>SAP Cloud Application
-  Programming Model (CAP)</b> sobre Node.js, em duas versões: <b>JavaScript</b> e <b>TypeScript</b>.
+  Oito aplicações SAPUI5 — quatro de gestão (<b>Clientes</b>, <b>Estoque</b>, <b>Pedidos de Compras</b> e
+  <b>Reembolsos</b>) e quatro de análise (<b>Pedidos de Compras</b>, <b>Clientes</b>, <b>Itens do Estoque</b> e
+  <b>Pedidos de Reembolsos</b>) — com backend em <b>SAP Cloud Application Programming Model (CAP)</b> sobre
+  Node.js, em duas versões: <b>JavaScript</b> e <b>TypeScript</b>.
 </p>
 
 <p align="center">
@@ -80,7 +81,10 @@ regras de domínio, dos testes e dos scripts.
 | Gestão de Estoque | Itens (SKU, foto, categoria, descrição), disponibilidade e status | `EstoqueService` (`/odata/v4/estoque`) | `ZUI_PC_ESTOQUE` |
 | Pedidos de Compras | Pedidos, itens, pagamento simulado, cancelamento e histórico (snapshots) | `PedidosService` (`/odata/v4/pedidos`) | `ZUI_PC_PEDIDOS_COMPRAS` |
 | Gestão de Reembolsos | Aprovação e rejeição de reembolsos de pedidos cancelados com pagamento aprovado | `ReembolsosService` (`/odata/v4/reembolsos`) | `ZUI_PC_REEMBOLSOS` |
-| Análises de Compras | 20 análises (indicadores e gráficos) dos quatro domínios | `AnaliticoService` (`/odata/v4/analitico`) | `ZUI_PC_ANALITICO` |
+| Análise de Pedidos de Compras | Indicadores e 5 gráficos dos pedidos (valor, status, pagamento, UF, mês) | `AnaliticoService` (`/odata/v4/analitico`) | `ZUI_PC_ANALITICO` |
+| Análise de Clientes | Indicadores e 5 gráficos dos clientes (gênero, UF, score, cadastros) | `AnaliticoService` | `ZUI_PC_ANALITICO` |
+| Análise de Itens do Estoque | Indicadores e 5 gráficos do estoque (categoria, situação, reservas, valor) | `AnaliticoService` | `ZUI_PC_ANALITICO` |
+| Análise de Pedidos de Reembolsos | Indicadores e 5 gráficos dos reembolsos (status, mês, UF, motivo) | `AnaliticoService` | `ZUI_PC_ANALITICO` |
 
 > [!NOTE]
 > Em desenvolvimento o banco é **SQLite em memória**, recriado a cada inicialização com os dados de
@@ -92,7 +96,7 @@ regras de domínio, dos testes e dos scripts.
 ## Demonstração
 
 <p align="center">
-  <img src="docs/assets/launchpad.png" alt="Launchpad local com os cinco tiles" width="900">
+  <img src="docs/assets/launchpad.png" alt="Launchpad local com os oito tiles" width="900">
 </p>
 
 | Pedidos de Compras | Object Page do pedido |
@@ -103,9 +107,17 @@ regras de domínio, dos testes e dos scripts.
 | :----------------: | :---------------: |
 | <img src="docs/assets/clientes.png" alt="Lista de clientes" width="440"> | <img src="docs/assets/estoque.png" alt="Lista de itens de estoque" width="440"> |
 
-| Gestão de Reembolsos | Análises de Compras |
-| :------------------: | :-----------------: |
-| <img src="docs/assets/reembolsos.png" alt="Lista de reembolsos" width="440"> | <img src="docs/assets/analises.png" alt="Painel de análises de pedidos" width="440"> |
+| Gestão de Reembolsos | Efetuar Pagamento (campos com máscara) |
+| :------------------: | :------------------------------------: |
+| <img src="docs/assets/reembolsos.png" alt="Lista de reembolsos" width="440"> | <img src="docs/assets/pagamento-mascara.png" alt="Diálogo Efetuar Pagamento com máscara no cartão, validade e CVV" width="440"> |
+
+| Análise de Pedidos de Compras | Análise de Clientes |
+| :---------------------------: | :-----------------: |
+| <img src="docs/assets/analise-pedidos.png" alt="Painel da Análise de Pedidos de Compras" width="440"> | <img src="docs/assets/analise-clientes.png" alt="Painel da Análise de Clientes" width="440"> |
+
+| Análise de Itens do Estoque | Análise de Pedidos de Reembolsos |
+| :-------------------------: | :------------------------------: |
+| <img src="docs/assets/analise-estoque.png" alt="Painel da Análise de Itens do Estoque" width="440"> | <img src="docs/assets/analise-reembolsos.png" alt="Painel da Análise de Pedidos de Reembolsos" width="440"> |
 
 ---
 
@@ -126,19 +138,24 @@ regras de domínio, dos testes e dos scripts.
   pedido (`ABERTO`) e reserva o estoque; no pedido aberto só os **itens** mudam e a reserva é
   ajustada pela **diferença**. O pedido não é excluído — só **Efetuar Pagamento**, **Aprovar pedido**
   e **Cancelar pedido** (com motivo).
-- **Pagamento simulado** por cartão (VISA/Mastercard): número, validade e CVV ficam só em memória;
-  gravam-se bandeira, últimos 4 dígitos e máscara. A seção de pagamento é somente leitura e só a ação
-  *Efetuar Pagamento* a preenche.
+- **Pagamento simulado** por cartão (VISA/Mastercard): o diálogo de *Efetuar Pagamento* tem máscara
+  de digitação no número do cartão (`9999 9999 9999 9999`), na validade (`MM/AA`) e no CVV (`999`).
+  Número, validade e CVV ficam só em memória; gravam-se bandeira, últimos 4 dígitos e máscara. A seção
+  de pagamento é somente leitura e só a ação *Efetuar Pagamento* a preenche.
 - **Object Page dinâmica do pedido**: *Dados do Cliente*, *Dados do Pedido*, *Itens*, *Pagamento* e,
   conforme o status, *Finalização* ou *Cancelamento*; cliente e itens vêm dos **snapshots** quando o
   pedido está `FINALIZADO` ou `CANCELADO`.
 - **Reembolso**: cancelar um pedido com pagamento aprovado abre uma solicitação
   (`PROCESSANDO_REEMBOLSO`), decidida na app **Gestão de Reembolsos**.
 - **Importação por planilha** (`.xlsx` ou `.csv`) em Clientes, Estoque e Pedidos, tudo ou nada.
-- **Análises**: app freestyle com 20 análises sobre um serviço com agregações `$apply`.
-- **Launchpad local** (sandbox do SAP Fiori launchpad) com os cinco tiles e navegação entre as apps
-  por objetos semânticos: no pedido, Cliente e CPF abrem o cliente e Item e SKU abrem o item; no
-  reembolso, o Pedido abre o pedido e Cliente e CPF abrem o cliente, sempre direto no registro.
+- **Análises**: quatro apps freestyle, uma por domínio (pedidos, clientes, estoque e reembolsos),
+  cada uma com barra de filtros, indicadores, 5 gráficos e página de detalhe, sobre um serviço com
+  agregações `$apply`; o botão *Abrir gestão* leva à app de gestão do domínio.
+- **Launchpad local** (sandbox do SAP Fiori launchpad) com os oito tiles e navegação entre as apps
+  por objetos semânticos, sempre direto no registro: no pedido, Cliente e CPF abrem o cliente, Item e
+  SKU abrem o item e *Solicitação de reembolso* abre o reembolso do pedido; no histórico do pedido
+  (snapshots), cliente e item também abrem as apps de origem; no reembolso, o Pedido abre o pedido e
+  Cliente e CPF abrem o cliente.
 - **Autorização** por papel: `Admin` e `Comum` (`@requires` / `@restrict`).
 - **Concorrência** de estoque com `UPDATE` condicional atômico na transação da requisição.
 
@@ -152,7 +169,7 @@ regras de domínio, dos testes e dos scripts.
 | Linguagem | JavaScript (`nodejs-padrao`) e TypeScript 6 `strict` com `@cap-js/cds-typer` e `tsx` (`nodejs-typescript`) |
 | Banco | SQLite em memória (`@cap-js/sqlite`) em desenvolvimento; SAP HANA Cloud na implantação (pendente) |
 | Serviços | OData V4 com rascunho (draft), `@restrict`, `@assert`/`@mandatory`, side effects, `$apply` |
-| Front-end | SAPUI5 1.148 (LTS): Fiori Elements V4 (List Report + Object Page) e app freestyle, servidos pelo `cds-plugin-ui5` |
+| Front-end | SAPUI5 1.148 (LTS): Fiori Elements V4 (List Report + Object Page) e apps freestyle, servidos pelo `cds-plugin-ui5` |
 | Integração | ViaCEP via `fetch` nativo (URL em `cds.requires.viacep`) |
 | Ferramentas | `@sap/cds-dk` 10, SAP Fiori tools (geração das apps), UI5 linter, ESLint 10, `local-ssl-proxy` (HTTPS local) |
 | Testes | `node:test` + `@cap-js/cds-test` (68 testes por versão), ViaCEP falso local |
@@ -169,7 +186,7 @@ flowchart LR
         APPE["Gestão de Estoque"]
         APPP["Pedidos de Compras"]
         APPR["Gestão de Reembolsos"]
-        APPA["Análises de Compras"]
+        APPA["Análises<br/>Pedidos · Clientes<br/>Estoque · Reembolsos"]
     end
 
     subgraph CAP["SAP CAP (Node.js)"]
@@ -192,6 +209,8 @@ flowchart LR
     APPP -. objeto semântico .-> APPE
     APPR -. objeto semântico .-> APPP
     APPR -. objeto semântico .-> APPC
+    APPP -. objeto semântico .-> APPR
+    APPA -. abrir gestão .-> APPC & APPE & APPP & APPR
     SC & SE & SP & SR --> LIB
     LIB --> DB
     SA --> DB
@@ -239,7 +258,10 @@ stateDiagram-v2
 │   │   ├── gestao-estoque/            Fiori Elements
 │   │   ├── pedidos-compras/           Fiori Elements
 │   │   ├── gestao-reembolsos/         Fiori Elements
-│   │   ├── analise-compras/           SAPUI5 freestyle (20 análises)
+│   │   ├── analise-pedidos/           SAPUI5 freestyle: Análise de Pedidos de Compras
+│   │   ├── analise-clientes/          SAPUI5 freestyle: Análise de Clientes
+│   │   ├── analise-estoque/           SAPUI5 freestyle: Análise de Itens do Estoque
+│   │   ├── analise-reembolsos/        SAPUI5 freestyle: Análise de Pedidos de Reembolsos
 │   │   ├── launchpad.html             sandbox do SAP Fiori launchpad
 │   │   └── launchpad/                 configuração e inicialização do launchpad
 │   ├── db/
@@ -306,7 +328,7 @@ npm install
 npm run watch            # serviços + apps em http://localhost:4004
 ```
 
-Abra `http://localhost:4004/launchpad.html` (launchpad com os cinco tiles) ou a página inicial do
+Abra `http://localhost:4004/launchpad.html` (launchpad com os oito tiles) ou a página inicial do
 CAP, que lista serviços e apps. O banco SQLite em memória é recriado a cada inicialização com os dados
 de `db/data`: 100 clientes, 100 itens e 100 pedidos em todos os status (porte das classes
 `ZCL_SETUP_*`). Para regenerar os CSVs: `npm run dados:demo`.
@@ -341,7 +363,7 @@ Autenticação *mocked* do CAP:
 ## Front-end Fiori
 
 Quatro apps **Fiori Elements OData V4** (List Report + Object Page), geradas com o **SAP Fiori tools**,
-e uma app **SAPUI5 freestyle**. Ficam em `app/` de cada implementação e são servidas pelo próprio CAP
+e quatro apps **SAPUI5 freestyle** de análise. Ficam em `app/` de cada implementação e são servidas pelo próprio CAP
 via `cds-plugin-ui5`. A UI é orientada a anotações: colunas, filtros, seções, ações, criticidade e
 side effects vêm de `app/<app>/annotations.cds` e `app/common.cds`.
 
@@ -349,14 +371,23 @@ side effects vêm de `app/<app>/annotations.cds` e `app/common.cds`.
 | --- | --- | --- | --- |
 | Gestão de Clientes | `/gestaoclientes/index.html` | Cliente → Endereço | `Cliente-manage` |
 | Gestão de Estoque | `/gestaoestoque/index.html` | Item | `ItemEstoque-manage` |
-| Pedidos de Compras | `/pedidoscompras/index.html` | Pedido → Item do pedido / Item histórico | `PedidoCompra-manage` |
+| Pedidos de Compras | `/pedidoscompras/index.html` | Pedido → Item do pedido / Item no encerramento | `PedidoCompra-manage` |
 | Gestão de Reembolsos | `/gestaoreembolsos/index.html` | Reembolso | `Reembolso-manage` |
-| Análises de Compras | `/analisecompras/index.html` | Painel por domínio → Detalhe da análise | `AnaliseCompras-display` |
+| Análise de Pedidos de Compras | `/analisepedidos/index.html` | Painel → Detalhe da análise | `AnalisePedidos-display` |
+| Análise de Clientes | `/analiseclientes/index.html` | Painel → Detalhe da análise | `AnaliseClientes-display` |
+| Análise de Itens do Estoque | `/analiseestoque/index.html` | Painel → Detalhe da análise | `AnaliseEstoque-display` |
+| Análise de Pedidos de Reembolsos | `/analisereembolsos/index.html` | Painel → Detalhe da análise | `AnaliseReembolsos-display` |
 
 - **Importar planilha**: ação customizada no List Report de Clientes, Estoque e Pedidos
   (`webapp/ext/ImportarPlanilha.js`), com diálogo de escolha de arquivo que chama a action
   `importarPlanilha` do serviço.
 - **Itens do pedido** são criados na própria tabela (*inline*), só no rascunho.
+- **Efetuar Pagamento** (List Report e Object Page do pedido) abre um diálogo próprio
+  (`webapp/ext/EfetuarPagamento.js`) com `sap.m.MaskInput` no cartão, na validade e no CVV — o diálogo
+  padrão de parâmetros do Fiori Elements não tem máscara de digitação. O botão só habilita com todos os
+  campos completos e mês de validade entre 01 e 12; a chamada é a mesma action vinculada, pelo
+  `editFlow`, e o backend continua validando tudo. A ação fica no menu *Ações* junto de *Aprovar
+  pedido* e *Cancelar pedido*.
 - **Navegação entre apps** (no launchpad local): os campos abaixo viram links que abrem a Object
   Page do registro na app de destino, que o localiza pela chave semântica (`cpf`, `sku`,
   `numeroPedido`) recebida no contexto da navegação.
@@ -365,8 +396,17 @@ side effects vêm de `app/<app>/annotations.cds` e `app/common.cds`.
   | --- | --- | --- |
   | Pedidos | Cliente, CPF | Gestão de Clientes (`Cliente-manage`, `cpfCliente` → `cpf`) |
   | Itens do pedido | Item, SKU | Gestão de Estoque (`ItemEstoque-manage`, `skuItem` → `sku`) |
+  | Pedidos | *Solicitação de reembolso* (link direto, só quando o pedido tem reembolso) | Gestão de Reembolsos (`Reembolso-manage`, `numeroPedido`) |
+  | Pedidos (encerrado) | Cliente, CPF do snapshot | Gestão de Clientes (`Cliente-manage`) |
+  | Item no encerramento | Item, SKU do snapshot | Gestão de Estoque (`ItemEstoque-manage`) |
   | Reembolsos | Pedido (link direto, `DataFieldWithIntentBasedNavigation`) | Pedidos de Compras (`PedidoCompra-manage`) |
   | Reembolsos | Cliente, CPF | Gestão de Clientes (`Cliente-manage`) |
+  | Apps de análise | Botão *Abrir gestão* | App de gestão do domínio |
+
+  O launchpad liga a resolução de intents no cliente (`ClientSideTargetResolution`); sem ela o Fiori
+  Elements não recebe os objetos semânticos disponíveis e esconde os links.
+- **Object Page do item no encerramento** (snapshot do pedido finalizado ou cancelado): mostra nome,
+  SKU, descrição, categoria, quantidade, preço, total e data do congelamento.
 - **Validação**: manifests na versão 2.0.0, UI5 linter sem apontamentos; telas conferidas no navegador.
 
 ---
@@ -417,6 +457,10 @@ ajustados junto com as regras de negócio. São 68 testes por versão, todos pas
 | `analitico.test` | Agregações `$apply` dos quatro domínios | — |
 
 Os testes rodam sem o `cds-plugin-ui5` (`CDS_PLUGIN_UI5_ACTIVE=false`), porque exercitam só o backend.
+
+As apps de análise têm ainda testes **QUnit** do catálogo de cenários e da montagem das consultas
+`$apply` (`webapp/test/unit`), executados no navegador com `npm run watch` em
+`/<app>/test/testsuite.qunit.html` (ex.: `/analisepedidos/test/testsuite.qunit.html`).
 
 ---
 
@@ -557,9 +601,20 @@ Camada analítica **somente leitura**: `AnaliticoService` expõe `PedidosAnalise
 `ItensAnalise` e `ReembolsosAnalise`, com dimensões e medidas (`@Aggregation.default`, expostas como
 *custom aggregates*), o que permite `$apply=groupby/aggregate` no servidor.
 
-O front-end é a app **freestyle** `analise-compras` (porte da app do projeto RAP): um painel por
-domínio (Pedidos, Clientes, Estoque, Reembolsos) com barra de filtros, indicadores e 5 gráficos cada,
-num total de 20 análises, e uma página de detalhe por análise.
+O front-end são quatro apps **freestyle** (porte da app de análises do projeto RAP, dividida por
+domínio), cada uma com barra de filtros, indicadores, 5 gráficos e uma página de detalhe por análise
+(gráfico ampliado e tabela), num total de 20 análises:
+
+| App | Entidade | Indicadores | Análises |
+| --- | --- | --- | --- |
+| Análise de Pedidos de Compras (`analise-pedidos`) | `PedidosAnalise` | Valor total, pedidos, ticket médio | Valor por status; pedidos por mês; valor por UF; pedidos por status do pagamento; ticket médio por status |
+| Análise de Clientes (`analise-clientes`) | `ClientesAnalise` | Clientes, score médio | Por gênero; por UF; por faixa de score; cadastros por mês; score médio por UF |
+| Análise de Itens do Estoque (`analise-estoque`) | `ItensAnalise` | Itens, em estoque, reservada, disponível, valor em estoque | Estoque por categoria; itens por situação; valor por categoria; mais reservados (top 10); itens por categoria |
+| Análise de Pedidos de Reembolsos (`analise-reembolsos`) | `ReembolsosAnalise` | Reembolsos, valor | Valor por status; quantidade por status; valor por mês; valor por UF; por motivo da solicitação |
+
+As quatro compartilham a mesma estrutura (`model/Scenarios.js` com as medidas, dimensões e cenários
+do domínio, `model/AnalyticsQuery.js` para o `$apply`, `control/AnalysisChart.js` e `FilterBar.js`) e
+o botão *Abrir gestão* navega para a app de gestão do domínio.
 
 ---
 
@@ -588,12 +643,8 @@ num total de 20 análises, e uma página de detalhe por análise.
   HANA Cloud ainda não foi testada.
 - **Autenticação de produção** (XSUAA/IAS) e descritor MTA ainda não configurados; em desenvolvimento
   a autenticação é *mocked*.
-- **Launchpad local**: o sandbox do SAPUI5 1.148 mostra, além dos cinco tiles, o grupo padrão
-  *Sample Applications* do próprio sandbox.
 - **Object Page**: as seções são carregadas sob demanda; ao abrir um pedido a página pode começar
   rolada para *Dados do Pedido* — role para cima ou use a barra de seções para ver *Dados do Cliente*.
-- **Dados do cartão** aparecem sem máscara no diálogo da ação (parâmetros de action do Fiori Elements);
-  não são gravados nem registrados em log.
 
 ---
 
@@ -601,6 +652,7 @@ num total de 20 análises, e uma página de detalhe por análise.
 
 | Versão | Mudanças |
 | --- | --- |
+| v1.5 | Análises divididas em quatro apps (Análise de Pedidos de Compras, de Clientes, de Itens do Estoque e de Pedidos de Reembolsos), com tiles próprios no launchpad e testes QUnit corrigidos; máscara de digitação no diálogo *Efetuar Pagamento*; navegações das Object Pages completadas (pedido → reembolso, histórico do cliente e dos itens → apps de origem, Object Page do item no encerramento); especificação técnica 2.2 |
 | v1.4 | Importação de pedidos sem duplicidade: a coluna Pedido vira a *Referência de importação* do pedido, e a mesma referência para o mesmo cliente é recusada enquanto houver pedido não cancelado com ela; 68 testes por versão; especificação técnica 2.1 |
 | v1.3 | Navegação entre aplicações: no pedido, Cliente/CPF → Gestão de Clientes e Item/SKU → Gestão de Estoque; no reembolso, Pedido → Pedidos de Compras e Cliente/CPF → Gestão de Clientes; `skuItem` em `ItensPedido` e CPF sem formatação em `Reembolsos` para o contexto da navegação |
 | v1.2 | Correção no pedido: só o cliente (na criação) e os itens são informados; dados do cliente lidos pela associação e somente leitura (antes apareciam editáveis e obrigatórios e ficavam vazios no rascunho); pagamento e snapshots somente leitura, gravados só pelas ações; observação somente leitura na tela; testes de regressão (66 por versão); README principal no modelo do projeto RAP |
