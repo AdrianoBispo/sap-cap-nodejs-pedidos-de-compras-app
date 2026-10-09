@@ -3,7 +3,7 @@
 Versão em **TypeScript** do porte para o **SAP Cloud Application Programming Model (CAP) 10** da
 aplicação de Pedidos de Compras construída em SAP RAP (pacote `ZAVBS_PC`). É funcionalmente idêntica
 à versão JavaScript de [`../nodejs-padrao`](../nodejs-padrao): mesmo modelo CDS, mesmos serviços OData,
-mesmas cinco aplicações SAPUI5, mesmos dados de demonstração e a mesma suíte de 63 testes, agora com
+mesmas cinco aplicações SAPUI5, mesmos dados de demonstração e a mesma suíte de 66 testes, agora com
 handlers, regras de domínio, testes e scripts escritos em TypeScript `strict` e tipados a partir do
 modelo CDS pelo **cds-typer**.
 
@@ -32,7 +32,7 @@ modelo CDS pelo **cds-typer**.
 | Serviços | OData V4 com rascunho (draft), `@restrict`, `@assert`/`@mandatory`, `$apply` |
 | Front-end | SAPUI5 1.148 (LTS): Fiori Elements V4 (List Report/Object Page) e app freestyle, `cds-plugin-ui5` |
 | Integração | ViaCEP (`fetch` nativo, URL em `cds.requires.viacep`) |
-| Qualidade | `node:test` + `@cap-js/cds-test` (63 testes), ESLint 10 + `typescript-eslint`, `tsc --noEmit` |
+| Qualidade | `node:test` + `@cap-js/cds-test` (66 testes), ESLint 10 + `typescript-eslint`, `tsc --noEmit` |
 
 ## Como executar
 
@@ -59,7 +59,7 @@ O banco é recriado a cada inicialização com os dados de demonstração de `db
 | `npm run watch` | `cds-tsx watch`: servidor com recarga automática executando os `.ts` via `tsx` |
 | `npm run typer` | Gera os tipos do modelo CDS em `@cds-models` (`cds-typer "*"`) |
 | `npm run typecheck` | `typer` + `tsc --noEmit` (verificação de tipos em `srv/`, `test/` e `scripts/`) |
-| `npm test` | `typer` + 63 testes (`node --test` com `tsx`, `CDS_TYPESCRIPT=tsx`), com ViaCEP falso local |
+| `npm test` | `typer` + 66 testes (`node --test` com `tsx`, `CDS_TYPESCRIPT=tsx`), com ViaCEP falso local |
 | `npm run lint` | ESLint (recomendado do CAP + `typescript-eslint`) e `typecheck` |
 | `npm run build` | `cds build --production`: modelo compilado e `tsc` (`tsconfig.cdsbuild.json`) em `gen/srv` |
 | `npm run serve` | `cds-tsx serve`: servidor sem recarga, executando os `.ts` via `tsx` |
@@ -105,7 +105,7 @@ export default class PedidosService extends cds.ApplicationService {
 ## Testes e lint
 
 ```sh
-npm test             # 63 testes (unidade + serviços), com ViaCEP falso local
+npm test             # 66 testes (unidade + serviços), com ViaCEP falso local
 npm run lint         # ESLint + verificação de tipos
 ```
 

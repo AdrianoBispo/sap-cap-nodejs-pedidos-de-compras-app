@@ -29,7 +29,7 @@ freestyle) servidas pelo próprio CAP.
 | Serviços | OData V4 com rascunho (draft), `@restrict`, `@assert`/`@mandatory`, `$apply` |
 | Front-end | SAPUI5 1.148 (LTS): Fiori Elements V4 (List Report/Object Page) e app freestyle, `cds-plugin-ui5` |
 | Integração | ViaCEP (`fetch` nativo, URL em `cds.requires.viacep`) |
-| Qualidade | `node:test` + `@cap-js/cds-test` (63 testes), ESLint 10, UI5 linter |
+| Qualidade | `node:test` + `@cap-js/cds-test` (66 testes), ESLint 10, UI5 linter |
 
 ## Como executar
 
@@ -52,7 +52,7 @@ O banco é recriado a cada inicialização com os dados de demonstração de `db
 ## Testes e lint
 
 ```sh
-npm test             # 63 testes (unidade + serviços), com ViaCEP falso local
+npm test             # 66 testes (unidade + serviços), com ViaCEP falso local
 npm run lint         # ESLint (configuração recomendada do CAP)
 ```
 

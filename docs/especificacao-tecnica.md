@@ -40,7 +40,7 @@ gateways de pagamento.
 | Integração | ViaCEP via `fetch` nativo (URL em `cds.requires.viacep`) | Implementado |
 | Segurança | Autenticação *mocked* com papéis `Admin`/`Comum`; XSUAA na implantação | Mocked implementado; XSUAA pendente |
 | Deploy | Cloud Foundry / MTA (`mta.yaml`) | Pendente |
-| Qualidade | `node:test` + `@cap-js/cds-test` (63 testes por versão), ESLint 10 | Implementado |
+| Qualidade | `node:test` + `@cap-js/cds-test` (66 testes por versão), ESLint 10 | Implementado |
 
 ---
 
@@ -264,7 +264,7 @@ usam `cuid` (chave `ID` UUID) e `managed` (`createdAt`, `createdBy`, `modifiedAt
 | `reembolsos` | `Association to many Reembolsos` | Solicitações do pedido |
 | `statusPedido` | `Association to StatusPedido` | Ciclo de vida (seção 8) |
 | `statusPagamento` | `Association to StatusPagamento` | Réplica do status do pagamento para lista e filtros |
-| `observacao` | `String(500)` | Livre |
+| `observacao` | `String(500)` | Somente leitura na tela; preenchida na importação por planilha |
 | `currency`, `valorTotal` | `Currency default 'BRL'`, `Valor default 0` | Total calculado pelo backend |
 | `dataFinalizacao` | `Timestamp` | Preenchida na aprovação |
 | `motivoCancelamento`, `dataCancelamento`, `canceladoPor` | `String(500)`, `Timestamp`, `User` | Preenchidos no cancelamento |
@@ -467,7 +467,7 @@ rascunho ──Salvar──▶ ABERTO ──pagamento aprovado──▶ AGUARDAN
 | Status | Editar | Efetuar Pagamento | Aprovar pedido | Cancelar pedido | Excluir |
 |---|:---:|:---:|:---:|:---:|:---:|
 | rascunho | Sim | Não | Não | Não | Descartar |
-| `ABERTO` | Sim (itens e observação) | Sim | Não (pagamento pendente) | Sim | Não |
+| `ABERTO` | Sim (somente itens) | Sim | Não (pagamento pendente) | Sim | Não |
 | `AGUARDANDO_APROVACAO` | Não | Não | Sim | Sim (abre reembolso) | Não |
 | `PROCESSANDO_REEMBOLSO` | Não | Não | Não | Não | Não |
 | `FINALIZADO` | Não | Não | Não | Não | Não |
@@ -546,7 +546,7 @@ As ações só executam sobre o pedido **ativo** e sem rascunho de edição em a
 
 **Edição do pedido `ABERTO`**
 
-- Só os itens e a observação mudam; o cliente é imutável (`PEDIDO_CLIENTE_IMUTAVEL`).
+- Só os itens mudam; o cliente é imutável (`PEDIDO_CLIENTE_IMUTAVEL`).
 - O Save compara a nova composição com a reserva atual: reserva o acréscimo, libera o excedente e a
   reserva de itens removidos. Item inativo só barra itens novos ou com quantidade maior.
 - Itens que já estavam no pedido mantêm o preço fixado; itens novos usam o preço atual.
@@ -724,6 +724,11 @@ Clientes e Estoque).
 - Seções: Dados do Cliente, Dados do Pedido, Itens, Pagamento (última tentativa), Finalização
   (só `FINALIZADO`) e Cancelamento (só `CANCELADO`).
 - Pedido encerrado: Dados do Cliente e Itens vêm dos snapshots.
+- O usuário informa apenas o **Cliente** (só na criação) e os itens. CPF, e-mail, telefone, gênero,
+  nascimento e endereço de entrega são preenchidos automaticamente pela associação `cliente` e são
+  somente leitura (`@Core.Computed`); os demais campos do pedido são mantidos pelo backend.
+- A seção Pagamento é somente leitura (`Pagamentos` é `@readonly` no `PedidosService`): só a ação
+  *Efetuar Pagamento* grava o pagamento, e a edição dos itens não o altera.
 - *Editar* só aparece em `ABERTO`; *Excluir* nunca aparece para o pedido registrado.
 - Side effects: trocar o cliente recarrega endereço e dados do cliente; alterar item ou quantidade
   recarrega preço, total da linha e total do pedido.
@@ -909,7 +914,7 @@ teste correspondente nas duas suítes.
 
 ## 20. Testes Automatizados
 
-63 testes por versão (`node:test` + `@cap-js/cds-test`), com um servidor ViaCEP falso local (sem
+66 testes por versão (`node:test` + `@cap-js/cds-test`), com um servidor ViaCEP falso local (sem
 rede externa) e um gerador de `.xlsx` mínimo. São permanentes, como a suíte ABAP Unit do RAP.
 
 | Arquivo | Cobertura | Classes de teste RAP equivalentes |
@@ -917,7 +922,7 @@ rede externa) e um gerador de `.xlsx` mínimo. São permanentes, como a suíte A
 | `unidade.test` | CPF, e-mail, telefone, imagens, status de estoque, SKU, pagamento simulado, leitor XLSX/CSV | `ltcl_digitos_cpf`, `ltcl_email_imagem`, `ltcl_estoque_endereco`, testes de `ZCL_PC_PAGAMENTO_SIM` e `ZCL_PC_PLANILHA` |
 | `clientes.test` | Rascunho, ViaCEP, CEP geral, CEP único, endereço principal, CPF, autorização, exclusão, foto | `ltcl_persistencia_endereco` |
 | `estoque.test` | SKU, disponibilidade e status, concorrência com edição, inativação e exclusão | `ltcl_sku_item` |
-| `pedidos.test` | Registro com reserva, edição pela diferença, pagamento, aprovação, cancelamento, reembolso | `ltcl_registro_pedido`, `ltcl_edicao_pedido`, `ltcl_ciclo_pedido` |
+| `pedidos.test` | Registro com reserva, edição pela diferença, pagamento, aprovação, cancelamento, reembolso, campos somente leitura (cliente e pagamento) | `ltcl_registro_pedido`, `ltcl_edicao_pedido`, `ltcl_ciclo_pedido` |
 | `reembolsos.test` | Aprovar, rejeitar (motivo obrigatório), decisão única | `ltcl_reembolso` |
 | `importacao.test` | Clientes, estoque e pedidos (tudo ou nada) e modelos de `docs/` | testes de `ZCL_PC_IMPORTACAO` |
 | `analitico.test` | Agregações `$apply` dos quatro domínios | — |
@@ -1002,7 +1007,7 @@ Estrutura de cada implementação (as diferenças estão marcadas):
 | Papéis | `PedidosCompras.Comum`/`PedidosCompras.Admin`, usuários `Comum`/`Admin` | Papéis `Comum`/`Admin`, usuários `comum`/`admin` |
 | Interface | App única com navegação interna | 5 apps independentes + launchpad com navegação entre elas |
 | Novos recursos | — | Reembolsos, importação por planilha, camada analítica, dados de demonstração |
-| Testes | Fora do escopo inicial | 63 testes automatizados por versão |
+| Testes | Fora do escopo inicial | 66 testes automatizados por versão |
 | Linguagem | Node.js | JavaScript e TypeScript |
 | Estrutura | `srv/handlers`, `srv/utils`, `.cdsrc.json`, `mta.yaml`, `xs-security.json` | Um serviço por app, `srv/lib`, configuração no `package.json`; MTA e XSUAA pendentes |
 
