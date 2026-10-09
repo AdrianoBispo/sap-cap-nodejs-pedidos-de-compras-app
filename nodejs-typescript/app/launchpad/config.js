@@ -1,6 +1,6 @@
 /*
  * Configuração do launchpad local (sandbox do SAP Fiori launchpad): um tile
- * por aplicação. Os intents (objeto semântico + ação) são os mesmos dos
+ * por aplicação (quatro de gestão, Pedidos de Compras e quatro de análise). Os intents (objeto semântico + ação) são os mesmos dos
  * inbounds dos manifests, o que habilita a navegação entre as aplicações
  * (ex.: cliente e item do pedido abrem as apps de Clientes e Estoque).
  *
@@ -56,13 +56,37 @@ window["sap-ushell-config"] = {
             applicationType: "URL",
             url: "/gestaoreembolsos"
         },
-        "AnaliseCompras-display": {
-            title: "Análises de Compras",
-            description: "Indicadores e gráficos",
-            icon: "sap-icon://business-objects-experience",
-            additionalInformation: "SAPUI5.Component=analisecompras",
+        "AnalisePedidos-display": {
+            title: "Análise de Pedidos de Compras",
+            description: "Valor, status, UF e ticket médio",
+            icon: "sap-icon://bar-chart",
+            additionalInformation: "SAPUI5.Component=analisepedidos",
             applicationType: "URL",
-            url: "/analisecompras"
+            url: "/analisepedidos"
+        },
+        "AnaliseClientes-display": {
+            title: "Análise de Clientes",
+            description: "Gênero, UF, score e cadastros",
+            icon: "sap-icon://donut-chart",
+            additionalInformation: "SAPUI5.Component=analiseclientes",
+            applicationType: "URL",
+            url: "/analiseclientes"
+        },
+        "AnaliseEstoque-display": {
+            title: "Análise de Itens do Estoque",
+            description: "Disponível, reservado e valor",
+            icon: "sap-icon://horizontal-stacked-chart",
+            additionalInformation: "SAPUI5.Component=analiseestoque",
+            applicationType: "URL",
+            url: "/analiseestoque"
+        },
+        "AnaliseReembolsos-display": {
+            title: "Análise de Pedidos de Reembolsos",
+            description: "Valor, status, mês e motivo",
+            icon: "sap-icon://line-chart",
+            additionalInformation: "SAPUI5.Component=analisereembolsos",
+            applicationType: "URL",
+            url: "/analisereembolsos"
         }
     }
 };
