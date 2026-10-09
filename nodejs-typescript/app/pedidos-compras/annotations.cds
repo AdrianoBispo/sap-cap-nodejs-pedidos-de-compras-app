@@ -328,6 +328,10 @@ annotate service.Pedidos with @(
   dataNascimentoCliente @title: 'Data de nascimento';
 };
 
+// Na UI, "Efetuar Pagamento" abre o diálogo com campos mascarados de
+// webapp/ext/EfetuarPagamento.js (o manifest troca o item dos grupos de ações
+// AcoesPedido/AcoesPedidoOP pela ação customizada, que chama esta mesma action).
+// Os títulos abaixo valem para chamadas sem o diálogo customizado.
 annotate service.Pedidos actions {
   efetuarPagamento @(
     Common.IsActionCritical: false

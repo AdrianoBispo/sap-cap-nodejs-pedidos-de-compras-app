@@ -165,7 +165,11 @@
                       "requiresSelection": false,
                       "text": "{i18n>importarPlanilha}"
                     },
-                    "DataFieldForAction::PedidosService.efetuarPagamento": {
+                    "efetuarPagamento": {
+                      "press": "pedidoscompras.ext.EfetuarPagamento.abrir",
+                      "text": "{i18n>pagamentoAcao}",
+                      "requiresSelection": true,
+                      "enabled": "pedidoscompras.ext.EfetuarPagamento.habilitado",
                       "visible": "pedidoscompras.ext.AcoesPedido.visivel"
                     },
                     "DataFieldForAction::PedidosService.aprovarPedido": {
@@ -173,6 +177,13 @@
                     },
                     "DataFieldForAction::PedidosService.cancelarPedido": {
                       "visible": "pedidoscompras.ext.AcoesPedido.visivel"
+                    },
+                    "DataFieldForActionGroup::AcoesPedido": {
+                      "menu": [
+                        "efetuarPagamento",
+                        "DataFieldForAction::PedidosService.aprovarPedido",
+                        "DataFieldForAction::PedidosService.cancelarPedido"
+                      ]
                     }
                   }
                 }
@@ -214,6 +225,24 @@
                   "tableSettings": {
                     "type": "ResponsiveTable",
                     "selectionMode": "None"
+                  }
+                }
+              },
+              "content": {
+                "header": {
+                  "actions": {
+                    "efetuarPagamento": {
+                      "press": "pedidoscompras.ext.EfetuarPagamento.abrir",
+                      "text": "{i18n>pagamentoAcao}",
+                      "enabled": "{= %{statusPedido_code} === 'ABERTO'}"
+                    },
+                    "DataFieldForActionGroup::AcoesPedidoOP": {
+                      "menu": [
+                        "efetuarPagamento",
+                        "DataFieldForAction::PedidosService.aprovarPedido",
+                        "DataFieldForAction::PedidosService.cancelarPedido"
+                      ]
+                    }
                   }
                 }
               }
