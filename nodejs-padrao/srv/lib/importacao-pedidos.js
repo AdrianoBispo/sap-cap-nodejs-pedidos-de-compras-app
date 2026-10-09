@@ -4,15 +4,21 @@
  * ABERTO, com o endereço principal do cliente e o estoque reservado, como no
  * registro pela tela. Tudo ou nada: o estoque disponível tem de cobrir a soma
  * pedida em toda a planilha.
+ *
+ * A referência (coluna Pedido) é gravada no pedido e funciona como chave de
+ * idempotência: a mesma referência não é importada duas vezes para o mesmo
+ * cliente, salvo se o pedido anterior estiver CANCELADO.
  */
 import cds from '@sap/cds'
 import { lerPlanilha, valor, paraInteiro } from './planilha.js'
 import { normalizarCpf, falharImportacao, concluirImportacao, textosDoErro } from './importacao.js'
-import { enderecoPrincipal } from './pedidos.js'
+import { enderecoPrincipal, STATUS } from './pedidos.js'
 import { formatarCpf } from './util.js'
 import { lerConteudo } from './requisicao.js'
 
-const { SELECT, INSERT } = cds.ql
+const { SELECT, INSERT, UPDATE } = cds.ql
+
+const TAMANHO_REFERENCIA = 40
 
 const COLUNAS = [
   {
@@ -45,6 +51,9 @@ export async function importarPedidos(req, srv) {
       obs: valor(reg, 'Observação')
     }
     if (!linha.ref) erros.push(`${pref}Pedido (referência que agrupa os itens) é obrigatório.`)
+    else if (linha.ref.length > TAMANHO_REFERENCIA) {
+      erros.push(`${pref}Pedido (referência) excede ${TAMANHO_REFERENCIA} caracteres.`)
+    }
     if (linha.cpf.length !== 11) erros.push(`${pref}CPF inválido (${valor(reg, 'CPF')}).`)
     if (!linha.sku) erros.push(`${pref}SKU é obrigatório.`)
     if (!(linha.qtde > 0)) erros.push(`${pref}Quantidade deve ser um número inteiro maior que zero.`)
@@ -93,7 +102,10 @@ export async function importarPedidos(req, srv) {
     atual.itens.push({ item_ID: item.ID, qtdeItemPedido: linha.qtde })
     grupos.set(linha.ref, atual)
   }
-  // 3) O estoque tem de cobrir a soma de toda a planilha
+  // 3) Referência já importada para o mesmo cliente (pedido não cancelado)
+  for (const texto of await referenciasJaImportadas(db, [...grupos.values()])) erros.push(texto)
+
+  // 4) O estoque tem de cobrir a soma de toda a planilha
   for (const item of itens.values()) {
     const pedido = demanda.get(item.ID)
     const disponivel = item.qtdeEstoque - item.qtdeReservada
@@ -103,15 +115,36 @@ export async function importarPedidos(req, srv) {
   }
   if (erros.length) return falharImportacao(req, erros)
 
-  // 4) Criação pelo serviço (registro do pedido com reserva de estoque)
+  // 5) Criação pelo serviço (registro do pedido com reserva de estoque). A
+  // referência é campo controlado pelo backend (o serviço a descarta), então
+  // é gravada direto no banco, na mesma transação.
   const { Pedidos } = srv.entities
   for (const grupo of grupos.values()) {
+    const ID = cds.utils.uuid()
     try {
-      await srv.run(INSERT.into(Pedidos).entries({ cliente_ID: grupo.cliente_ID, observacao: grupo.obs || null, itens: grupo.itens }))
+      await srv.run(INSERT.into(Pedidos).entries({ ID, cliente_ID: grupo.cliente_ID, observacao: grupo.obs || null, itens: grupo.itens }))
     } catch (e) {
       for (const texto of textosDoErro(e, req.locale)) erros.push(`Pedido ${grupo.ref} (linha ${grupo.linha}): ${texto}`)
       return falharImportacao(req, erros)
     }
+    await UPDATE(db.Pedidos, ID).with({ referenciaImportacao: grupo.ref })
   }
   return concluirImportacao(req, grupos.size)
+}
+
+/** Mensagens das referências que o cliente já tem num pedido não cancelado. */
+async function referenciasJaImportadas(db, grupos) {
+  if (!grupos.length) return []
+  const existentes = await SELECT.from(db.Pedidos)
+    .columns('cliente_ID', 'referenciaImportacao', 'numeroPedido')
+    .where({
+      referenciaImportacao: { in: [...new Set(grupos.map(g => g.ref))] },
+      cliente_ID: { in: [...new Set(grupos.map(g => g.cliente_ID))] },
+      statusPedido_code: { '!=': STATUS.cancelado }
+    })
+  const numeros = new Map(existentes.map(p => [`${p.cliente_ID}|${p.referenciaImportacao}`, p.numeroPedido]))
+  return grupos
+    .filter(g => numeros.has(`${g.cliente_ID}|${g.ref}`))
+    .map(g => `Linha ${g.linha}: o pedido ${g.ref} do cliente ${formatarCpf(g.cpf)} já foi importado ` +
+      `(pedido ${numeros.get(`${g.cliente_ID}|${g.ref}`)}).`)
 }

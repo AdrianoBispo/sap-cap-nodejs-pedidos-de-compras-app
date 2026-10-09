@@ -10,8 +10,8 @@
  *    pedido ativo e conforme o status.
  */
 import cds, { type Request } from '@sap/cds'
-import { Pedidos, ItensPedido, importarPlanilha, type Pedido } from '#cds-models/PedidosService'
-import { Itens as ItensDb, ItensPedido as ItensPedidoDb, Pedidos as PedidosDb } from '#cds-models/pedidoscompras'
+import { Pedidos, ItensPedido, importarPlanilha, type ItemPedido, type Pedido } from '#cds-models/PedidosService'
+import { Clientes as ClientesDb, Itens as ItensDb, ItensPedido as ItensPedidoDb, Pedidos as PedidosDb } from '#cds-models/pedidoscompras'
 import {
   STATUS, STATUS_PAGAMENTO, MOEDA_PADRAO,
   enderecoPrincipal, reservaAtual, erroStatus, registrarPedido, atualizarPedidoAberto, removerCamposControlados,
@@ -27,6 +27,9 @@ import { arredondar } from './lib/util.js'
 /** Parâmetros das ações vinculadas ao pedido (tipos gerados pelo cds-typer). */
 type ParametrosPagamento = typeof Pedido.actions.efetuarPagamento.__parameters
 type ParametrosCancelamento = typeof Pedido.actions.cancelarPedido.__parameters
+
+/** Estado da linha gravado no rascunho (na criação, só o pedido). */
+type LinhaRascunho = Pick<ItemPedido, 'pedido_ID' | 'item_ID' | 'qtdeItemPedido'>
 
 /** Requisição de linha de rascunho excluída/descartada, com o pedido guardado no before. */
 type RequisicaoLinha = Request & { pedidoDaLinha?: string | null }
@@ -57,23 +60,22 @@ export default class PedidosService extends cds.ApplicationService {
       const endereco = await enderecoPrincipal(req.data.cliente_ID)
       req.data.endereco_ID = endereco?.ID ?? null
       req.data.enderecoPrincipalCompleto = endereco?.completo ?? null
+      // O rascunho guarda o CPF lido da associação: acompanha o cliente escolhido
+      const cliente = req.data.cliente_ID ? await SELECT.one.from(ClientesDb, req.data.cliente_ID).columns('cpf', 'cpfFormatado') : null
+      req.data.cpfCliente = cliente?.cpf ?? null
+      req.data.cpfClienteFormatado = cliente?.cpfFormatado ?? null
       if (req.data.cliente_ID && !endereco) aviso(req, 'CLIENTE_SEM_ENDERECO_PRINCIPAL', {}, 'cliente_ID')
     })
 
-    this.before('NEW', ItensPedido.drafts, req => {
-      req.data.currency_code ??= MOEDA_PADRAO
-      req.data.qtdeItemPedido ??= 1
-    })
-
-    // Preço provisório e total da linha; item sem estoque é barrado na hora
-    this.before('PATCH', ItensPedido.drafts, async req => {
-      if (!('item_ID' in req.data) && !('qtdeItemPedido' in req.data)) return
-      const linha = await SELECT.one.from(ItensPedido.drafts).columns('pedido_ID', 'item_ID', 'qtdeItemPedido').where({ ID: chave(req) })
+    // Preço provisório, total e SKU da linha; item sem estoque é barrado na
+    // hora. `linha` é o estado gravado no rascunho (só o pedido, na criação).
+    const calcularLinha = async (req: Request<ItemPedido>, linha: LinhaRascunho | undefined) => {
       const itemID = 'item_ID' in req.data ? req.data.item_ID : linha?.item_ID
       const qtde = Number('qtdeItemPedido' in req.data ? req.data.qtdeItemPedido : linha?.qtdeItemPedido) || 0
       let preco = 0
+      let item
       if (itemID) {
-        const item = await SELECT.one.from(ItensDb, itemID).columns('sku', 'precoUnitario', 'currency_code', 'qtdeDisponivel')
+        item = await SELECT.one.from(ItensDb, itemID).columns('sku', 'precoUnitario', 'currency_code', 'qtdeDisponivel')
         const jaNoPedido = linha?.pedido_ID ? (await reservaAtual(linha.pedido_ID)).has(itemID) : false
         if ('item_ID' in req.data && item && (item.qtdeDisponivel ?? 0) <= 0 && !jaNoPedido) {
           return rejeitar(req, 409, 'ITEM_SEM_ESTOQUE', { sku: item.sku }, 'item_ID')
@@ -84,8 +86,23 @@ export default class PedidosService extends cds.ApplicationService {
         preco = Number(fixado?.precoUnitarioSnapshot ?? item?.precoUnitario ?? 0)
         req.data.currency_code = item?.currency_code ?? MOEDA_PADRAO
       }
+      // O rascunho guarda o SKU lido da associação: acompanha o item escolhido
+      if ('item_ID' in req.data) req.data.skuItem = item?.sku ?? null
       req.data.precoUnitarioSnapshot = preco
       req.data.valorTotal = arredondar(qtde * preco)
+    }
+
+    // A linha pode nascer já com o item (criação inline na tabela de itens)
+    this.before('NEW', ItensPedido.drafts, req => {
+      req.data.currency_code ??= MOEDA_PADRAO
+      req.data.qtdeItemPedido ??= 1
+      return calcularLinha(req, { pedido_ID: req.data.pedido_ID })
+    })
+
+    this.before('PATCH', ItensPedido.drafts, async req => {
+      if (!('item_ID' in req.data) && !('qtdeItemPedido' in req.data)) return
+      const linha = await SELECT.one.from(ItensPedido.drafts).columns('pedido_ID', 'item_ID', 'qtdeItemPedido').where({ ID: chave(req) })
+      return calcularLinha(req, linha ?? undefined)
     })
 
     // Total do pedido no rascunho (soma das linhas)

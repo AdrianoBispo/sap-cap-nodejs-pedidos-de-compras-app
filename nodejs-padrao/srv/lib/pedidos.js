@@ -38,7 +38,8 @@ export const MOEDA_PADRAO = 'BRL'
 /** Campos do pedido mantidos só pelo backend (nunca vêm da UI). */
 export const CAMPOS_CONTROLADOS = [
   'numeroPedido', 'statusPedido_code', 'statusPagamento_code', 'endereco_ID', 'enderecoPrincipalCompleto',
-  'valorTotal', 'currency_code', 'dataFinalizacao', 'motivoCancelamento', 'dataCancelamento', 'canceladoPor'
+  'valorTotal', 'currency_code', 'dataFinalizacao', 'motivoCancelamento', 'dataCancelamento', 'canceladoPor',
+  'referenciaImportacao'
 ]
 
 const db = () => cds.entities('pedidoscompras')

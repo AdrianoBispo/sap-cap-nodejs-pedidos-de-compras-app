@@ -28,7 +28,12 @@ service PedidosService {
     cliente.email             as emailCliente,
     cliente.telefoneFormatado as telefoneCliente,
     cliente.genero.name       as generoCliente,
-    cliente.dataNascimento    as dataNascimentoCliente
+    cliente.dataNascimento    as dataNascimentoCliente,
+    /** Sem solicitação de reembolso: esconde o link para a Gestão de Reembolsos. */
+    case
+      when exists reembolsos then false
+      else true
+    end                       as semReembolso : Boolean
   }
     excluding {
       reembolsos
@@ -74,6 +79,12 @@ service PedidosService {
       action cancelarPedido(
         @mandatory motivoCancelamento : String(500)) returns Pedidos;
     };
+
+  /** Itens do pedido; o SKU vem do item (navegação para a Gestão de Estoque). */
+  entity ItensPedido             as projection on db.ItensPedido {
+    *,
+    item.sku as skuItem
+  };
 
   /** Clientes (somente leitura): textos e value help do pedido. */
   @readonly
@@ -160,6 +171,10 @@ annotate PedidosService.Pedidos with {
   telefoneCliente       @Core.Computed  @mandatory: false;
   generoCliente         @Core.Computed  @mandatory: false;
   dataNascimentoCliente @Core.Computed  @mandatory: false;
+};
+
+annotate PedidosService.ItensPedido with {
+  skuItem @Core.Computed;
 };
 
 annotate PedidosService.Pagamentos with @readonly {

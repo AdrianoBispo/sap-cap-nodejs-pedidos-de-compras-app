@@ -233,10 +233,12 @@ describe('Pedidos de Compras', () => {
     it('cancelar com pagamento aprovado abre reembolso e mantém a reserva', async () => {
       const item = await itemComEstoque()
       const pedido = await pedidoRegistrado([{ item: item.ID, qtde: 1 }])
+      assert.equal(pedido.semReembolso, true, 'sem solicitação: link para a Gestão de Reembolsos oculto')
       await acao(pedido.ID, 'efetuarPagamento', CARTAO_OK)
       const antes = await saldo(item.ID)
       const { data } = await acao(pedido.ID, 'cancelarPedido', { motivoCancelamento: 'Produto com defeito' })
       assert.equal(data.statusPedido_code, 'PROCESSANDO_REEMBOLSO')
+      assert.equal(data.semReembolso, false, 'com solicitação: o pedido mostra o link para o reembolso')
       assert.equal((await saldo(item.ID)).qtdeReservada, antes.qtdeReservada)
       const { data: reembolsos } = await api.get(`/odata/v4/reembolsos/Reembolsos?$filter=pedido_ID eq ${pedido.ID}`)
       assert.equal(reembolsos.value.length, 1)

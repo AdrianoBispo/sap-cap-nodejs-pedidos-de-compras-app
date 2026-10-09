@@ -2,8 +2,8 @@
 
 Porte para o **SAP Cloud Application Programming Model (CAP) 10** da aplicação de Pedidos de
 Compras construída em SAP RAP (pacote `ZAVBS_PC`). Backend em **Node.js (ESM, JavaScript)**,
-banco **SQLite** em desenvolvimento e cinco aplicações **SAPUI5** (quatro Fiori Elements e uma
-freestyle) servidas pelo próprio CAP.
+banco **SQLite** em desenvolvimento e oito aplicações **SAPUI5** (quatro Fiori Elements de gestão e
+quatro freestyle de análise) servidas pelo próprio CAP.
 
 > A versão em TypeScript (equivalente, com tipos gerados pelo cds-typer) fica em
 > [`../nodejs-typescript`](../nodejs-typescript) e a especificação técnica em
@@ -17,7 +17,10 @@ freestyle) servidas pelo próprio CAP.
 | Gestão de Estoque | `/gestaoestoque/index.html` | `/odata/v4/estoque` (`EstoqueService`) | `ZUI_PC_ESTOQUE` |
 | Pedidos de Compras | `/pedidoscompras/index.html` | `/odata/v4/pedidos` (`PedidosService`) | `ZUI_PC_PEDIDOS_COMPRAS` |
 | Gestão de Reembolsos | `/gestaoreembolsos/index.html` | `/odata/v4/reembolsos` (`ReembolsosService`) | `ZUI_PC_REEMBOLSOS` |
-| Análises de Compras | `/analisecompras/index.html` | `/odata/v4/analitico` (`AnaliticoService`) | `ZUI_PC_ANALITICO` |
+| Análise de Pedidos de Compras | `/analisepedidos/index.html` | `/odata/v4/analitico` (`AnaliticoService`) | `ZUI_PC_ANALITICO` |
+| Análise de Clientes | `/analiseclientes/index.html` | `/odata/v4/analitico` (`AnaliticoService`) | `ZUI_PC_ANALITICO` |
+| Análise de Itens do Estoque | `/analiseestoque/index.html` | `/odata/v4/analitico` (`AnaliticoService`) | `ZUI_PC_ANALITICO` |
+| Análise de Pedidos de Reembolsos | `/analisereembolsos/index.html` | `/odata/v4/analitico` (`AnaliticoService`) | `ZUI_PC_ANALITICO` |
 | Launchpad local | `/launchpad.html` | — | Fiori Launchpad / Work Zone |
 
 ## Tecnologias
@@ -27,9 +30,9 @@ freestyle) servidas pelo próprio CAP.
 | Runtime | Node.js 22+, `@sap/cds` 10, módulos ESM |
 | Banco | SQLite em memória (`@cap-js/sqlite`) — SAP HANA Cloud fica para a implantação |
 | Serviços | OData V4 com rascunho (draft), `@restrict`, `@assert`/`@mandatory`, `$apply` |
-| Front-end | SAPUI5 1.148 (LTS): Fiori Elements V4 (List Report/Object Page) e app freestyle, `cds-plugin-ui5` |
+| Front-end | SAPUI5 1.148 (LTS): Fiori Elements V4 (List Report/Object Page) e apps freestyle, `cds-plugin-ui5` |
 | Integração | ViaCEP (`fetch` nativo, URL em `cds.requires.viacep`) |
-| Qualidade | `node:test` + `@cap-js/cds-test` (66 testes), ESLint 10, UI5 linter |
+| Qualidade | `node:test` + `@cap-js/cds-test` (68 testes), ESLint 10, UI5 linter |
 
 ## Como executar
 
@@ -38,7 +41,7 @@ npm install          # instala o CAP e as dependências dos apps (workspaces app
 npm run watch        # cds watch: serviços + apps em http://localhost:4004
 ```
 
-Abra `http://localhost:4004/launchpad.html` (launchpad com os cinco tiles) ou a página inicial do
+Abra `http://localhost:4004/launchpad.html` (launchpad com os oito tiles) ou a página inicial do
 CAP. Usuários de desenvolvimento (autenticação *mocked*):
 
 | Usuário | Senha | Papel | Permissões |
@@ -52,7 +55,7 @@ O banco é recriado a cada inicialização com os dados de demonstração de `db
 ## Testes e lint
 
 ```sh
-npm test             # 66 testes (unidade + serviços), com ViaCEP falso local
+npm test             # 68 testes (unidade + serviços), com ViaCEP falso local
 npm run lint         # ESLint (configuração recomendada do CAP)
 ```
 
@@ -66,8 +69,11 @@ junto com as regras de negócio.
 | `test/estoque.test.js` | SKU, disponibilidade e status, concorrência com edição, inativação e exclusão |
 | `test/pedidos.test.js` | registro com reserva, edição pela diferença, pagamento, aprovação, cancelamento, reembolso, campos somente leitura |
 | `test/reembolsos.test.js` | aprovar, rejeitar (motivo obrigatório), decisão única |
-| `test/importacao.test.js` | importação de clientes, estoque e pedidos (tudo ou nada) e dos modelos em `docs/` |
+| `test/importacao.test.js` | importação de clientes, estoque e pedidos (tudo ou nada), reimportação de pedidos recusada e dos modelos em `docs/` |
 | `test/analitico.test.js` | agregações `$apply` dos quatro domínios |
+
+As apps de análise têm testes QUnit em `app/analise-*/webapp/test`, abertos no navegador com
+`npm run watch` (ex.: `/analisepedidos/test/testsuite.qunit.html`).
 
 ## Estrutura
 
@@ -81,7 +87,10 @@ nodejs-padrao/
 │   ├── gestao-estoque/          Fiori Elements
 │   ├── pedidos-compras/         Fiori Elements
 │   ├── gestao-reembolsos/       Fiori Elements
-│   ├── analise-compras/         SAPUI5 freestyle (20 análises)
+│   ├── analise-pedidos/         SAPUI5 freestyle: Análise de Pedidos de Compras
+│   ├── analise-clientes/        SAPUI5 freestyle: Análise de Clientes
+│   ├── analise-estoque/         SAPUI5 freestyle: Análise de Itens do Estoque
+│   ├── analise-reembolsos/      SAPUI5 freestyle: Análise de Pedidos de Reembolsos
 │   ├── launchpad.html           sandbox do Fiori launchpad
 │   └── launchpad/               configuração e inicialização do launchpad
 ├── db/
@@ -109,13 +118,18 @@ nodejs-padrao/
   só é alterada pelos pedidos; inativação e exclusão controladas.
 - **Pedidos**: o Save do rascunho registra o pedido (`ABERTO`), gera o número e reserva o estoque;
   no pedido aberto só os itens mudam e a reserva é ajustada pela diferença; *Efetuar Pagamento*
-  (cartão simulado, nada sensível é gravado), *Aprovar pedido* (baixa, snapshots, `FINALIZADO`) e
+  (cartão simulado em diálogo com máscara no cartão, validade e CVV; nada sensível é gravado), *Aprovar pedido* (baixa, snapshots, `FINALIZADO`) e
   *Cancelar pedido* (libera a reserva e gera snapshots; com pagamento aprovado abre reembolso).
 - **Reembolsos**: *Aprovar* cancela o pedido, libera a reserva e devolve o pagamento; *Rejeitar*
   (motivo obrigatório) devolve o pedido ao status anterior.
+- **Navegação entre apps** (launchpad local): no pedido, Cliente/CPF abrem o cliente, Item/SKU
+  abrem o item e *Solicitação de reembolso* abre o reembolso; no histórico (snapshots), cliente e item
+  abrem as apps de origem; no reembolso, o Pedido abre o pedido e Cliente/CPF abrem o cliente; nas
+  análises, *Abrir gestão* abre a app de gestão do domínio.
 - **Concorrência**: cada movimento de estoque é um `UPDATE` condicional atômico ("só reserva se o
   saldo atual cobre a quantidade"); qualquer erro desfaz a transação inteira.
-- **Importação por planilha** (`.xlsx`/`.csv`) em Clientes, Estoque e Pedidos, tudo ou nada; modelos
+- **Importação por planilha** (`.xlsx`/`.csv`) em Clientes, Estoque e Pedidos, tudo ou nada; a
+  referência do pedido (coluna Pedido) não é reimportada para o mesmo cliente; modelos
   em [`../docs/modelos-importacao`](../docs/modelos-importacao).
 
 ## Diferenças em relação ao RAP

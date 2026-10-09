@@ -29,7 +29,10 @@ annotate service.Reembolsos with @(
       Label : 'Rejeitar'
     },
     {
+      $Type            : 'UI.DataFieldWithIntentBasedNavigation',
       Value            : numeroPedido,
+      SemanticObject   : 'PedidoCompra',
+      Action           : 'manage',
       ![@UI.Importance]: #High
     },
     {
@@ -54,7 +57,9 @@ annotate service.Reembolsos with @(
       Property  : dataSolicitacao,
       Descending: true
     }],
-    Visualizations: ['@UI.LineItem']
+    Visualizations: ['@UI.LineItem'],
+    // CPF sempre carregado: é o parâmetro da navegação para o cliente
+    RequestAtLeast: [cpfCliente]
   },
   UI.Identification        : [
     {
@@ -85,7 +90,12 @@ annotate service.Reembolsos with @(
     Target: '@UI.FieldGroup#Reembolso'
   }],
   UI.FieldGroup #Reembolso : {Data: [
-    {Value: numeroPedido},
+    {
+      $Type         : 'UI.DataFieldWithIntentBasedNavigation',
+      Value         : numeroPedido,
+      SemanticObject: 'PedidoCompra',
+      Action        : 'manage'
+    },
     {Value: nomeCliente},
     {Value: cpfCliente},
     {
@@ -102,8 +112,24 @@ annotate service.Reembolsos with @(
     {Value: decididoPor}
   ]}
 ) {
-  nomeCliente          @title: 'Cliente'  @Common.SemanticObject: 'Cliente';
-  cpfCliente           @title: 'CPF';
+  // Cliente e CPF abrem o cliente na Gestão de Clientes (chave semântica: cpf)
+  nomeCliente          @title: 'Cliente'  @Common: {
+    SemanticObject       : 'Cliente',
+    SemanticObjectMapping: [{
+      LocalProperty         : cpfCliente,
+      SemanticObjectProperty: 'cpf'
+    }]
+  };
+  cpfCliente           @title: 'CPF'  @Common: {
+    Text                 : cpfClienteFormatado,
+    TextArrangement      : #TextOnly,
+    SemanticObject       : 'Cliente',
+    SemanticObjectMapping: [{
+      LocalProperty         : cpfCliente,
+      SemanticObjectProperty: 'cpf'
+    }]
+  };
+  cpfClienteFormatado  @title: 'CPF';
   statusReembolso      @Common.ValueListWithFixedValues;
   statusPedidoAnterior @Common.ValueListWithFixedValues;
 };

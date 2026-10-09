@@ -128,6 +128,7 @@ annotate db.Pedidos with {
   statusPedido              @title: 'Status do pedido'  @Common.FieldControl: #ReadOnly;
   statusPagamento           @title: 'Status do pagamento'  @Common.FieldControl: #ReadOnly;
   observacao                @title: 'Observação'  @UI.MultiLineText  @Common.FieldControl: #ReadOnly;
+  referenciaImportacao      @title: 'Referência de importação'  @Common.FieldControl: #ReadOnly;
   currency                  @UI.Hidden;
   valorTotal                @title: 'Valor total'  @Common.FieldControl: #ReadOnly  @Measures.ISOCurrency: currency_code;
   dataFinalizacao           @title: 'Data de finalização'  @Common.FieldControl: #ReadOnly;

@@ -78,7 +78,10 @@
     "app/*"
   ],
   "sapux": [
-    "app/analise-compras",
+    "app/analise-clientes",
+    "app/analise-estoque",
+    "app/analise-pedidos",
+    "app/analise-reembolsos",
     "app/gestao-clientes",
     "app/gestao-estoque",
     "app/gestao-reembolsos",

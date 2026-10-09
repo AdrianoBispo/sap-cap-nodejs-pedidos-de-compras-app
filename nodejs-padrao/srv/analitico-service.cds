@@ -7,7 +7,8 @@ using {pedidoscompras as db} from '../db/schema';
  * Cada entidade é uma visão por domínio com dimensões e medidas. As medidas
  * têm agregação padrão (@Aggregation.default) e são expostas como "custom
  * aggregates", então o cliente usa $apply=groupby((dimensão),aggregate(medida))
- * sem informar o método. Usada pelo app freestyle app/analise-compras.
+ * sem informar o método. Usada pelos apps freestyle de análise (app/analise-pedidos,
+ * app/analise-clientes, app/analise-estoque e app/analise-reembolsos), um por visão.
  */
 @path    : 'analitico'
 @requires: [

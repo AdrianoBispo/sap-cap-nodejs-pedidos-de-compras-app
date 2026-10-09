@@ -19,8 +19,9 @@ service ReembolsosService {
   }]
   entity Reembolsos      as projection on db.Reembolsos {
     *,
-    cliente.nome as nomeCliente,
-    cliente.cpfFormatado as cpfCliente
+    cliente.nome         as nomeCliente,
+    cliente.cpf          as cpfCliente,
+    cliente.cpfFormatado as cpfClienteFormatado
   }
     actions {
       /** Cancela o pedido (libera a reserva, gera snapshots) e devolve o pagamento. */

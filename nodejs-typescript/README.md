@@ -3,7 +3,7 @@
 Versão em **TypeScript** do porte para o **SAP Cloud Application Programming Model (CAP) 10** da
 aplicação de Pedidos de Compras construída em SAP RAP (pacote `ZAVBS_PC`). É funcionalmente idêntica
 à versão JavaScript de [`../nodejs-padrao`](../nodejs-padrao): mesmo modelo CDS, mesmos serviços OData,
-mesmas cinco aplicações SAPUI5, mesmos dados de demonstração e a mesma suíte de 66 testes, agora com
+mesmas oito aplicações SAPUI5, mesmos dados de demonstração e a mesma suíte de 68 testes, agora com
 handlers, regras de domínio, testes e scripts escritos em TypeScript `strict` e tipados a partir do
 modelo CDS pelo **cds-typer**.
 
@@ -17,7 +17,10 @@ modelo CDS pelo **cds-typer**.
 | Gestão de Estoque | `/gestaoestoque/index.html` | `/odata/v4/estoque` (`EstoqueService`) | `ZUI_PC_ESTOQUE` |
 | Pedidos de Compras | `/pedidoscompras/index.html` | `/odata/v4/pedidos` (`PedidosService`) | `ZUI_PC_PEDIDOS_COMPRAS` |
 | Gestão de Reembolsos | `/gestaoreembolsos/index.html` | `/odata/v4/reembolsos` (`ReembolsosService`) | `ZUI_PC_REEMBOLSOS` |
-| Análises de Compras | `/analisecompras/index.html` | `/odata/v4/analitico` (`AnaliticoService`) | `ZUI_PC_ANALITICO` |
+| Análise de Pedidos de Compras | `/analisepedidos/index.html` | `/odata/v4/analitico` (`AnaliticoService`) | `ZUI_PC_ANALITICO` |
+| Análise de Clientes | `/analiseclientes/index.html` | `/odata/v4/analitico` (`AnaliticoService`) | `ZUI_PC_ANALITICO` |
+| Análise de Itens do Estoque | `/analiseestoque/index.html` | `/odata/v4/analitico` (`AnaliticoService`) | `ZUI_PC_ANALITICO` |
+| Análise de Pedidos de Reembolsos | `/analisereembolsos/index.html` | `/odata/v4/analitico` (`AnaliticoService`) | `ZUI_PC_ANALITICO` |
 | Launchpad local | `/launchpad.html` | — | Fiori Launchpad / Work Zone |
 
 ## Tecnologias
@@ -30,9 +33,9 @@ modelo CDS pelo **cds-typer**.
 | Execução | `tsx` em desenvolvimento e testes; `tsc` no `cds build` (JavaScript em `gen/srv`) |
 | Banco | SQLite em memória (`@cap-js/sqlite`) — SAP HANA Cloud fica para a implantação |
 | Serviços | OData V4 com rascunho (draft), `@restrict`, `@assert`/`@mandatory`, `$apply` |
-| Front-end | SAPUI5 1.148 (LTS): Fiori Elements V4 (List Report/Object Page) e app freestyle, `cds-plugin-ui5` |
+| Front-end | SAPUI5 1.148 (LTS): Fiori Elements V4 (List Report/Object Page) e apps freestyle, `cds-plugin-ui5` |
 | Integração | ViaCEP (`fetch` nativo, URL em `cds.requires.viacep`) |
-| Qualidade | `node:test` + `@cap-js/cds-test` (66 testes), ESLint 10 + `typescript-eslint`, `tsc --noEmit` |
+| Qualidade | `node:test` + `@cap-js/cds-test` (68 testes), ESLint 10 + `typescript-eslint`, `tsc --noEmit` |
 
 ## Como executar
 
@@ -41,7 +44,7 @@ npm install          # instala o CAP, as ferramentas TypeScript e os apps (works
 npm run watch        # cds-tsx watch: gera @cds-models, serve os .ts com tsx em http://localhost:4004
 ```
 
-Abra `http://localhost:4004/launchpad.html` (launchpad com os cinco tiles) ou a página inicial do
+Abra `http://localhost:4004/launchpad.html` (launchpad com os oito tiles) ou a página inicial do
 CAP. Usuários de desenvolvimento (autenticação *mocked*):
 
 | Usuário | Senha | Papel | Permissões |
@@ -59,7 +62,7 @@ O banco é recriado a cada inicialização com os dados de demonstração de `db
 | `npm run watch` | `cds-tsx watch`: servidor com recarga automática executando os `.ts` via `tsx` |
 | `npm run typer` | Gera os tipos do modelo CDS em `@cds-models` (`cds-typer "*"`) |
 | `npm run typecheck` | `typer` + `tsc --noEmit` (verificação de tipos em `srv/`, `test/` e `scripts/`) |
-| `npm test` | `typer` + 66 testes (`node --test` com `tsx`, `CDS_TYPESCRIPT=tsx`), com ViaCEP falso local |
+| `npm test` | `typer` + 68 testes (`node --test` com `tsx`, `CDS_TYPESCRIPT=tsx`), com ViaCEP falso local |
 | `npm run lint` | ESLint (recomendado do CAP + `typescript-eslint`) e `typecheck` |
 | `npm run build` | `cds build --production`: modelo compilado e `tsc` (`tsconfig.cdsbuild.json`) em `gen/srv` |
 | `npm run serve` | `cds-tsx serve`: servidor sem recarga, executando os `.ts` via `tsx` |
@@ -105,7 +108,7 @@ export default class PedidosService extends cds.ApplicationService {
 ## Testes e lint
 
 ```sh
-npm test             # 66 testes (unidade + serviços), com ViaCEP falso local
+npm test             # 68 testes (unidade + serviços), com ViaCEP falso local
 npm run lint         # ESLint + verificação de tipos
 ```
 
@@ -116,7 +119,7 @@ npm run lint         # ESLint + verificação de tipos
 | `test/estoque.test.ts` | SKU, disponibilidade e status, concorrência com edição, inativação e exclusão |
 | `test/pedidos.test.ts` | registro com reserva, edição pela diferença, pagamento, aprovação, cancelamento, reembolso, campos somente leitura |
 | `test/reembolsos.test.ts` | aprovar, rejeitar (motivo obrigatório), decisão única |
-| `test/importacao.test.ts` | importação de clientes, estoque e pedidos (tudo ou nada) e dos modelos em `docs/` |
+| `test/importacao.test.ts` | importação de clientes, estoque e pedidos (tudo ou nada), reimportação de pedidos recusada e dos modelos em `docs/` |
 | `test/analitico.test.ts` | agregações `$apply` dos quatro domínios |
 
 Os testes sobem o servidor CAP com `CDS_TYPESCRIPT=tsx`, o que faz o CAP carregar `srv/*.ts` (sem a
@@ -127,7 +130,7 @@ variável, os serviços ficariam só com os handlers genéricos e os testes de r
 ```text
 nodejs-typescript/
 ├── _i18n/messages.properties    mensagens de negócio (porte da message class ZPC_MSG)
-├── app/                         as mesmas cinco apps e o launchpad da versão JavaScript
+├── app/                         as mesmas oito apps e o launchpad da versão JavaScript
 ├── db/
 │   ├── common.cds               tipos e CodeLists
 │   ├── schema.cds               entidades (porte das tabelas ZTA_PC_*)

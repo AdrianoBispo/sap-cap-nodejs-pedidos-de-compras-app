@@ -164,6 +164,26 @@
                       "enabled": true,
                       "requiresSelection": false,
                       "text": "{i18n>importarPlanilha}"
+                    },
+                    "efetuarPagamento": {
+                      "press": "pedidoscompras.ext.EfetuarPagamento.abrir",
+                      "text": "{i18n>pagamentoAcao}",
+                      "requiresSelection": true,
+                      "enabled": "pedidoscompras.ext.EfetuarPagamento.habilitado",
+                      "visible": "pedidoscompras.ext.AcoesPedido.visivel"
+                    },
+                    "DataFieldForAction::PedidosService.aprovarPedido": {
+                      "visible": "pedidoscompras.ext.AcoesPedido.visivel"
+                    },
+                    "DataFieldForAction::PedidosService.cancelarPedido": {
+                      "visible": "pedidoscompras.ext.AcoesPedido.visivel"
+                    },
+                    "DataFieldForActionGroup::AcoesPedido": {
+                      "menu": [
+                        "efetuarPagamento",
+                        "DataFieldForAction::PedidosService.aprovarPedido",
+                        "DataFieldForAction::PedidosService.cancelarPedido"
+                      ]
                     }
                   }
                 }
@@ -197,7 +217,7 @@
                   "tableSettings": {
                     "type": "ResponsiveTable",
                     "creationMode": {
-                      "name": "InlineCreationRows"
+                      "name": "Inline"
                     }
                   }
                 },
@@ -205,6 +225,24 @@
                   "tableSettings": {
                     "type": "ResponsiveTable",
                     "selectionMode": "None"
+                  }
+                }
+              },
+              "content": {
+                "header": {
+                  "actions": {
+                    "efetuarPagamento": {
+                      "press": "pedidoscompras.ext.EfetuarPagamento.abrir",
+                      "text": "{i18n>pagamentoAcao}",
+                      "enabled": "{= %{statusPedido_code} === 'ABERTO'}"
+                    },
+                    "DataFieldForActionGroup::AcoesPedidoOP": {
+                      "menu": [
+                        "efetuarPagamento",
+                        "DataFieldForAction::PedidosService.aprovarPedido",
+                        "DataFieldForAction::PedidosService.cancelarPedido"
+                      ]
+                    }
                   }
                 }
               }
