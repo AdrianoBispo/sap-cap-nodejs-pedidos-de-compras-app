@@ -86,10 +86,12 @@ annotate service.Pedidos with @(
     RequestAtLeast: [cpfCliente]
   },
   UI.Identification               : [{
-    $Type  : 'UI.DataFieldForActionGroup',
-    ID     : 'AcoesPedidoOP',
-    Label  : 'Ações',
-    Actions: [
+    $Type        : 'UI.DataFieldForActionGroup',
+    ID           : 'AcoesPedidoOP',
+    Label        : 'Ações',
+    // Pedido FINALIZADO ou CANCELADO não tem ações
+    ![@UI.Hidden]: encerrado,
+    Actions      : [
       {
         $Type : 'UI.DataFieldForAction',
         Action: 'PedidosService.efetuarPagamento',

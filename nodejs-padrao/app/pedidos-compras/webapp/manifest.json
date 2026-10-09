@@ -164,6 +164,15 @@
                       "enabled": true,
                       "requiresSelection": false,
                       "text": "{i18n>importarPlanilha}"
+                    },
+                    "DataFieldForAction::PedidosService.efetuarPagamento": {
+                      "visible": "pedidoscompras.ext.AcoesPedido.visivel"
+                    },
+                    "DataFieldForAction::PedidosService.aprovarPedido": {
+                      "visible": "pedidoscompras.ext.AcoesPedido.visivel"
+                    },
+                    "DataFieldForAction::PedidosService.cancelarPedido": {
+                      "visible": "pedidoscompras.ext.AcoesPedido.visivel"
                     }
                   }
                 }
@@ -197,7 +206,7 @@
                   "tableSettings": {
                     "type": "ResponsiveTable",
                     "creationMode": {
-                      "name": "InlineCreationRows"
+                      "name": "Inline"
                     }
                   }
                 },

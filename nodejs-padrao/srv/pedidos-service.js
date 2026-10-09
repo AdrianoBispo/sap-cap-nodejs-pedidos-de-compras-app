@@ -59,15 +59,9 @@ export default class PedidosService extends cds.ApplicationService {
       if (req.data.cliente_ID && !endereco) aviso(req, 'CLIENTE_SEM_ENDERECO_PRINCIPAL', {}, 'cliente_ID')
     })
 
-    this.before('NEW', ItensPedido.drafts, req => {
-      req.data.currency_code ??= MOEDA_PADRAO
-      req.data.qtdeItemPedido ??= 1
-    })
-
-    // Preço provisório e total da linha; item sem estoque é barrado na hora
-    this.before('PATCH', ItensPedido.drafts, async req => {
-      if (!('item_ID' in req.data) && !('qtdeItemPedido' in req.data)) return
-      const linha = await SELECT.one.from(ItensPedido.drafts, chave(req)).columns('pedido_ID', 'item_ID', 'qtdeItemPedido')
+    // Preço provisório, total e SKU da linha; item sem estoque é barrado na
+    // hora. `linha` é o estado gravado no rascunho (só o pedido, na criação).
+    const calcularLinha = async (req, linha) => {
       const itemID = 'item_ID' in req.data ? req.data.item_ID : linha?.item_ID
       const qtde = Number('qtdeItemPedido' in req.data ? req.data.qtdeItemPedido : linha?.qtdeItemPedido) || 0
       let preco = 0
@@ -87,6 +81,19 @@ export default class PedidosService extends cds.ApplicationService {
       if ('item_ID' in req.data) req.data.skuItem = item?.sku ?? null
       req.data.precoUnitarioSnapshot = preco
       req.data.valorTotal = arredondar(qtde * preco)
+    }
+
+    // A linha pode nascer já com o item (criação inline na tabela de itens)
+    this.before('NEW', ItensPedido.drafts, req => {
+      req.data.currency_code ??= MOEDA_PADRAO
+      req.data.qtdeItemPedido ??= 1
+      return calcularLinha(req, { pedido_ID: req.data.pedido_ID })
+    })
+
+    this.before('PATCH', ItensPedido.drafts, async req => {
+      if (!('item_ID' in req.data) && !('qtdeItemPedido' in req.data)) return
+      const linha = await SELECT.one.from(ItensPedido.drafts, chave(req)).columns('pedido_ID', 'item_ID', 'qtdeItemPedido')
+      return calcularLinha(req, linha)
     })
 
     // Total do pedido no rascunho (soma das linhas)
