@@ -114,7 +114,7 @@ npm run lint         # ESLint + verificação de tipos
 | `test/unidade.test.ts` | CPF, e-mail, telefone, imagens, status de estoque, SKU, pagamento simulado, leitor XLSX/CSV |
 | `test/clientes.test.ts` | rascunho, ViaCEP, CEP geral, CEP único, endereço principal, CPF, autorização, exclusão, foto |
 | `test/estoque.test.ts` | SKU, disponibilidade e status, concorrência com edição, inativação e exclusão |
-| `test/pedidos.test.ts` | registro com reserva, edição pela diferença, pagamento, aprovação, cancelamento, reembolso |
+| `test/pedidos.test.ts` | registro com reserva, edição pela diferença, pagamento, aprovação, cancelamento, reembolso, campos somente leitura |
 | `test/reembolsos.test.ts` | aprovar, rejeitar (motivo obrigatório), decisão única |
 | `test/importacao.test.ts` | importação de clientes, estoque e pedidos (tudo ou nada) e dos modelos em `docs/` |
 | `test/analitico.test.ts` | agregações `$apply` dos quatro domínios |

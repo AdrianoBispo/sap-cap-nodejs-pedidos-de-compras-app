@@ -64,7 +64,7 @@ junto com as regras de negócio.
 | `test/unidade.test.js` | CPF, e-mail, telefone, imagens, status de estoque, SKU, pagamento simulado, leitor XLSX/CSV |
 | `test/clientes.test.js` | rascunho, ViaCEP, CEP geral, CEP único, endereço principal, CPF, autorização, exclusão, foto |
 | `test/estoque.test.js` | SKU, disponibilidade e status, concorrência com edição, inativação e exclusão |
-| `test/pedidos.test.js` | registro com reserva, edição pela diferença, pagamento, aprovação, cancelamento, reembolso |
+| `test/pedidos.test.js` | registro com reserva, edição pela diferença, pagamento, aprovação, cancelamento, reembolso, campos somente leitura |
 | `test/reembolsos.test.js` | aprovar, rejeitar (motivo obrigatório), decisão única |
 | `test/importacao.test.js` | importação de clientes, estoque e pedidos (tudo ou nada) e dos modelos em `docs/` |
 | `test/analitico.test.js` | agregações `$apply` dos quatro domínios |
