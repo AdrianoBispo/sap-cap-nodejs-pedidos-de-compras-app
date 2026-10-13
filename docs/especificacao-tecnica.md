@@ -8,7 +8,7 @@
 > revisões 2.1 (campos somente leitura no pedido, navegação entre apps e importação de pedidos sem
 > duplicidade), 2.2 (análises em quatro apps, máscara no pagamento e navegações das Object Pages),
 > 2.3 (permissões na UI, ações recusadas no rascunho e proteções na importação) e 2.4 (transições de
-> status atômicas nas ações do pedido e depuração no VS Code).
+> status atômicas nas ações do pedido).
 
 ---
 
@@ -1012,11 +1012,12 @@ teste correspondente nas duas suítes.
 | Gerar tipos | — | `npm run typer` |
 | Build de produção | `cds build --production` | `npm run build` |
 | Regenerar dados | `npm run dados:demo` | `npm run dados:demo` |
-| Depurar (VS Code) | `.vscode/launch.json`: servidor (`cds watch` ou `cds serve`), todos os testes, teste do arquivo aberto, anexar a processo | Idem com `cds-tsx` e `tsx` (breakpoints direto nos `.ts`, com source maps) |
+| Depurar (VS Code / BAS) | Configuração *cds serve* (`cds serve --with-mocks --in-memory?`) | Idem (o `cds serve` carrega os handlers `.ts`) |
 
-Para depurar, abra a pasta da implementação (`nodejs-padrao` ou `nodejs-typescript`) como workspace
-no VS Code e rode `npm install`. As configurações usam os executáveis locais de `node_modules/.bin`
-e anexam automaticamente os processos filhos do `watch` e do `node --test`.
+O `.vscode` de cada implementação é o gerado pelo `cds init`, o mesmo que o SAP Business Application
+Studio cria num projeto CAP: a configuração de depuração *cds serve* (`launch.json`), a tarefa
+*cds watch* (`tasks.json`) e as extensões recomendadas. Elas usam o `cds` global
+(`npm i -g @sap/cds-dk`); abra a pasta da implementação como workspace para depurar.
 
 ---
 
@@ -1152,7 +1153,6 @@ Estrutura de cada implementação (as diferenças estão marcadas):
 | Ações simultâneas no pedido | A ação mudava o status no fim, sem conferir o status lido; um segundo cancelamento simultâneo liberava a reserva de novo (consumindo reservas de outros pedidos) | Transição de status atômica no início de cada ação; a ação que perde a corrida recebe `PEDIDO_ALTERADO_CONCORRENTE` sem efeito (seção 10) |
 | Decisão do reembolso | Gravada depois do lado do pedido, sem conferir a solicitação | Gravada primeiro, só com a solicitação `PENDENTE` (seção 10) |
 | Pagar e aprovar | Regras no handler do serviço | Em `srv/lib/pedidos` (`efetuarPagamento`, `finalizarPedido`), como o cancelamento (seção 7.2) |
-| Depuração | `launch.json` dependia do `cds` global e, no TypeScript, não carregava os `.ts` | Configurações de servidor e testes nas duas implementações (seção 19.1) |
 | Testes | 71 (JavaScript) e 73 (TypeScript) | 72 (JavaScript) e 74 (TypeScript) |
 
 ---
