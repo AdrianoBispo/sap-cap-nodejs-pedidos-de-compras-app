@@ -1,19 +1,20 @@
 # Especificação Técnica — Sistema de Pedidos de Compras (SAP CAP + SAP Fiori)
 
-> **Versão 2.2 — outubro de 2026.** Esta revisão descreve o sistema **como implementado** nas duas
+> **Versão 2.3 — outubro de 2026.** Esta revisão descreve o sistema **como implementado** nas duas
 > versões do repositório: [`nodejs-padrao`](../nodejs-padrao) (JavaScript) e
 > [`nodejs-typescript`](../nodejs-typescript) (TypeScript). As duas compartilham o mesmo modelo CDS,
 > os mesmos serviços, as mesmas aplicações SAPUI5 e a mesma suíte de testes; diferem apenas na
 > linguagem dos handlers (seção 19). A seção 22 resume o que mudou em relação à versão 1 e nas
 > revisões 2.1 (campos somente leitura no pedido, navegação entre apps e importação de pedidos sem
-> duplicidade) e 2.2 (análises em quatro apps, máscara no pagamento e navegações das Object Pages).
+> duplicidade), 2.2 (análises em quatro apps, máscara no pagamento e navegações das Object Pages) e
+> 2.3 (permissões na UI, ações recusadas no rascunho e proteções na importação).
 
 ---
 
 ## 1. Objetivo
 
-Aplicação full stack de pedidos de compras com foco educacional, porte para o SAP Cloud Application
-Programming Model (CAP) do projeto SAP RAP original (pacote `ZAVBS_PC`), contemplando:
+Aplicação full stack de pedidos de compras com foco educacional, construída no SAP Cloud Application
+Programming Model (CAP), contemplando:
 
 - gestão de clientes e de seus endereços (com validação de CEP no ViaCEP);
 - gestão de estoque (itens, SKU, reserva, baixa e liberação);
@@ -26,6 +27,9 @@ Programming Model (CAP) do projeto SAP RAP original (pacote `ZAVBS_PC`), contemp
 
 **Fora do objetivo:** gestão de envio, logística, rastreamento de entrega e integração real com
 gateways de pagamento.
+
+A versão da aplicação em SAP RAP / ABAP Cloud está em
+[sap-abap-rap-pedidos-de-compras-app](https://github.com/AdrianoBispo/sap-abap-rap-pedidos-de-compras-app).
 
 ### 1.1 Stack tecnológica
 
@@ -42,7 +46,7 @@ gateways de pagamento.
 | Integração | ViaCEP via `fetch` nativo (URL em `cds.requires.viacep`) | Implementado |
 | Segurança | Autenticação *mocked* com papéis `Admin`/`Comum`; XSUAA na implantação | Mocked implementado; XSUAA pendente |
 | Deploy | Cloud Foundry / MTA (`mta.yaml`) | Pendente |
-| Qualidade | `node:test` + `@cap-js/cds-test` (68 testes por versão), ESLint 10 | Implementado |
+| Qualidade | `node:test` + `@cap-js/cds-test` (71 testes em JavaScript, 73 em TypeScript), ESLint 10 | Implementado |
 
 ---
 
@@ -130,6 +134,13 @@ A autorização é declarativa nos serviços CDS:
 | `PedidosService.Pedidos`, `ReembolsosService.Reembolsos` | `@restrict`: `*` para `Comum` e `Admin` |
 | `AnaliticoService` | `@requires: ['Comum', 'Admin']` |
 
+Os papéis do `@restrict` não chegam às anotações de UI, que são as mesmas para todos os usuários.
+Por isso `ClientesService` e `EstoqueService` expõem o singleton somente leitura `Permissoes`, com
+`somenteLeitura` = usuário sem o papel `Admin` (`srv/lib/permissoes`). As anotações
+`UI.CreateHidden`, `UI.UpdateHidden` e `UI.DeleteHidden` de `Clientes`, `Enderecos` e `Itens`, a
+ação *Definir como principal* e o botão *Importar planilha* usam esse valor, e o usuário `Comum` só
+vê as opções de consulta. O `@restrict` continua barrando a alteração no backend.
+
 Na implantação (pendente), os papéis `Admin` e `Comum` viram *role templates* do XSUAA
 (`xs-security.json`) associados a *role collections* na subconta da SAP BTP.
 
@@ -146,18 +157,18 @@ Na implantação (pendente), os papéis `Admin` e `Comum` viram *role templates*
 
 ### 5.1 Entidades persistentes (namespace `pedidoscompras`)
 
-| Entidade | Finalidade | Tabela RAP de origem |
-|---|---|---|
-| `Clientes` | Cadastro de clientes | `ZTA_PC_CLIENTE` |
-| `Enderecos` | Endereços dos clientes | `ZTA_PC_ENDERECO` |
-| `Itens` | Itens do estoque | `ZTA_PC_ITEM` |
-| `Pedidos` | Cabeçalho e ciclo de vida do pedido | `ZTA_PC_PEDIDO` |
-| `ItensPedido` | Linhas do pedido | `ZTA_PC_ITEM_PED` |
-| `Pagamentos` | Resultado seguro da última tentativa de pagamento | `ZTA_PC_PAGAMENTO` |
-| `PedidosClienteSnapshots` | Cliente e endereço congelados no encerramento | `ZTA_PC_SNAP_CLI` |
-| `PedidosItensSnapshots` | Itens congelados no encerramento | `ZTA_PC_SNAP_ITM` |
-| `Reembolsos` | Solicitações de reembolso | `ZTA_PC_REEMBOLSO` |
-| `Numeracoes` | Último número de cada sequencial (`PEDIDO`, `SKU`) | Number Range `ZPC_NR` |
+| Entidade | Finalidade |
+|---|--- |
+| `Clientes` | Cadastro de clientes |
+| `Enderecos` | Endereços dos clientes |
+| `Itens` | Itens do estoque |
+| `Pedidos` | Cabeçalho e ciclo de vida do pedido |
+| `ItensPedido` | Linhas do pedido |
+| `Pagamentos` | Resultado seguro da última tentativa de pagamento |
+| `PedidosClienteSnapshots` | Cliente e endereço congelados no encerramento |
+| `PedidosItensSnapshots` | Itens congelados no encerramento |
+| `Reembolsos` | Solicitações de reembolso |
+| `Numeracoes` | Último número de cada sequencial (`PEDIDO`, `SKU`) |
 
 ### 5.2 CodeLists
 
@@ -365,8 +376,8 @@ Todos em OData V4, sob `/odata/v4/<caminho>`, com um serviço por aplicação.
 
 | Serviço | Caminho | Entidades expostas | Rascunho | Actions |
 |---|---|---|---|---|
-| `ClientesService` | `clientes` | `Clientes` (com `cidadePrincipal`, `ufPrincipal`), `Enderecos`, `Generos`, `CepsCadastrados` | `Clientes` (+ `Enderecos`) | `definirEnderecoPrincipal` (vinculada a `Enderecos`), `importarPlanilha` |
-| `EstoqueService` | `estoque` | `Itens`, `Categorias`, `StatusEstoque` | `Itens` | `importarPlanilha` |
+| `ClientesService` | `clientes` | `Clientes` (com `cidadePrincipal`, `ufPrincipal`), `Enderecos`, `Generos`, `CepsCadastrados`, `Permissoes` (singleton) | `Clientes` (+ `Enderecos`) | `definirEnderecoPrincipal` (vinculada a `Enderecos`), `importarPlanilha` |
+| `EstoqueService` | `estoque` | `Itens`, `Categorias`, `StatusEstoque`, `Permissoes` (singleton) | `Itens` | `importarPlanilha` |
 | `PedidosService` | `pedidos` | `Pedidos` (com dados do cliente e `semReembolso`), `ItensPedido` (com `skuItem`, o SKU do item), `Clientes`, `ClientesAtivos`, `Enderecos`, `Itens`, `ItensAtivos`, CodeLists | `Pedidos` (+ `ItensPedido`) | `efetuarPagamento`, `aprovarPedido`, `cancelarPedido` (vinculadas), `importarPlanilha` |
 | `ReembolsosService` | `reembolsos` | `Reembolsos` (somente leitura, com nome, `cpfCliente` e `cpfClienteFormatado` do cliente), `StatusReembolso`, `StatusPedido` | — | `aprovarReembolso`, `rejeitarReembolso` (vinculadas) |
 | `AnaliticoService` | `analitico` | `PedidosAnalise`, `ClientesAnalise`, `ItensAnalise`, `ReembolsosAnalise` (somente leitura) | — | — |
@@ -408,18 +419,19 @@ Reserva, liberação e baixa de estoque, geração de número e de SKU, snapshot
 reembolso e retomada do pedido **não** são actions OData: são funções de `srv/lib` chamadas pelos
 handlers dentro da transação da requisição.
 
-| Módulo (`srv/lib`) | Responsabilidade | Classe RAP de origem |
-|---|---|---|
-| `util` | CPF, e-mail, telefone, imagens, SKU, endereço, arredondamento | `ZCL_PC_UTIL` |
-| `viacep` | Consulta ao ViaCEP com cache por processo (100 CEPs) e timeout | `ZCL_PC_VIACEP` |
-| `enderecos` | Preenchimento pelo CEP e validações do Save | BO Cliente |
-| `numeracao` | Sequenciais de pedido e SKU | `ZCL_PC_NUMERACAO` |
-| `estoque` | Reserva, liberação e baixa com `UPDATE` condicional | BO Item |
-| `pedidos` | Registro, edição, snapshots, cancelamento, reembolso, pagamento | `ZBP_R_PC_PEDIDO` |
-| `pagamento-simulado` | Simulação do cartão | `ZCL_PC_PAGAMENTO_SIM` |
-| `planilha` | Leitor de `.xlsx` (ZIP + XML, sem bibliotecas) e `.csv` | `ZCL_PC_PLANILHA` |
-| `importacao*` | Importações de clientes, estoque e pedidos | `ZCL_PC_IMPORTACAO` |
-| `mensagens`, `requisicao` | Atalhos de mensagens e leitura de chave/rascunho/upload | — |
+| Módulo (`srv/lib`) | Responsabilidade |
+|---|--- |
+| `util` | CPF, e-mail, telefone, imagens, SKU, endereço, arredondamento |
+| `viacep` | Consulta ao ViaCEP com cache por processo (100 CEPs) e timeout |
+| `enderecos` | Preenchimento pelo CEP e validações do Save |
+| `numeracao` | Sequenciais de pedido e SKU |
+| `estoque` | Reserva, liberação e baixa com `UPDATE` condicional |
+| `pedidos` | Registro, edição, snapshots, cancelamento, reembolso, pagamento |
+| `pagamento-simulado` | Simulação do cartão |
+| `planilha` | Leitor de `.xlsx` (ZIP + XML, sem bibliotecas; até 50 MB por parte descompactada) e `.csv` |
+| `importacao*` | Importações de clientes, estoque e pedidos |
+| `permissoes` | Conteúdo do singleton `Permissoes` (`somenteLeitura` pelo papel do usuário) |
+| `mensagens`, `requisicao` | Atalhos de mensagens e leitura de chave/rascunho/upload |
 
 ---
 
@@ -477,7 +489,9 @@ rascunho ──Salvar──▶ ABERTO ──pagamento aprovado──▶ AGUARDAN
 | `CANCELADO` | Não | Não | Não | Não | Não |
 
 As ações só executam sobre o pedido **ativo** e sem rascunho de edição em andamento
-(`ACAO_SOMENTE_ATIVO`, `PEDIDO_EM_EDICAO`). O pedido registrado nunca é excluído: é cancelado.
+(`ACAO_SOMENTE_ATIVO`, `PEDIDO_EM_EDICAO`). Os handlers das três ações também são registrados no
+rascunho (`Pedidos.drafts`), para que a chamada sobre ele receba essa mensagem (HTTP 409) em vez de
+"sem handler" (HTTP 501). O pedido registrado nunca é excluído: é cancelado.
 
 ---
 
@@ -655,7 +669,8 @@ Botão **Importar planilha** nas listas de Clientes, Estoque e Pedidos (extensã
   `.csv` (separador `;`, `,` ou tabulação; UTF-8 com ou sem BOM, ou Windows-1252). `.xls` é recusado.
 - A primeira linha não vazia é o cabeçalho; nomes de coluna comparados sem acento, espaço,
   pontuação ou caixa; cada coluna aceita sinônimos; colunas extras são ignoradas.
-- Máximo de 500 linhas de dados.
+- Máximo de 500 linhas de dados; cada parte do `.xlsx` descompactada pode ter até 50 MB (proteção
+  contra arquivos pequenos que se expandem demais).
 - **Tudo ou nada**: todas as linhas são validadas antes de gravar; com qualquer erro nada é gravado
   e a resposta lista até 15 erros por linha (mais o total omitido).
 - A gravação passa pelo próprio serviço, então valem as mesmas regras da tela (ViaCEP, SKU, reserva...).
@@ -666,7 +681,7 @@ Botão **Importar planilha** nas listas de Clientes, Estoque e Pedidos (extensã
 | Planilha | Colunas obrigatórias | Opcionais | Particularidades |
 |---|---|---|---|
 | Clientes (`Admin`) | CPF, Nome, E-mail, Telefone, Data de nascimento, CEP, Número | Gênero, Complemento | Um cliente por linha com o endereço principal; CPF sem zeros à esquerda é completado; CEP com 5–7 dígitos é completado; data `AAAA-MM-DD`, `DD/MM/AAAA` ou data do Excel; gênero pelo código ou pelo texto; CPF repetido na planilha ou já cadastrado é erro |
-| Estoque (`Admin`) | Nome, Categoria, Quantidade em estoque, Preço unitário | Descrição, Moeda (padrão BRL) | Item criado ativo com SKU; nome já cadastrado ou repetido é erro (evita duplicar estoque ao reenviar); preço aceita `1.234,56`, `1234.56` e `R$` |
+| Estoque (`Admin`) | Nome, Categoria, Quantidade em estoque, Preço unitário | Descrição, Moeda (padrão BRL) | Item criado ativo com SKU; nome já cadastrado ou repetido é erro, sem diferenciar maiúsculas de minúsculas (evita duplicar estoque ao reenviar); preço aceita `1.234,56`, `1234.56` e `R$` |
 | Pedidos (`Comum`/`Admin`) | Pedido (referência), CPF, SKU, Quantidade | Observação | Linhas com a mesma referência formam um pedido; cliente ativo com endereço principal; itens ativos; o disponível precisa cobrir a soma da planilha inteira; cada pedido nasce `ABERTO` com reserva; a referência é gravada no pedido e a mesma referência para o mesmo cliente é recusada enquanto houver pedido não cancelado com ela (reenviar a planilha não duplica pedidos); referência com até 40 caracteres |
 
 ---
@@ -805,7 +820,7 @@ pedido), enviada no contexto da navegação.
 
 ## 16. Mensagens
 
-Arquivo `_i18n/messages.properties` (porte da message class `ZPC_MSG`). Parâmetros nomeados entre chaves.
+Arquivo `_i18n/messages.properties`. Parâmetros nomeados entre chaves.
 
 | Chave | Mensagem |
 |---|---|
@@ -883,6 +898,7 @@ Cada critério tem teste automatizado correspondente (seção 20).
 - Dado um endereço sem número ou dois endereços com o mesmo CEP, quando salvar, então o Save é bloqueado.
 - Dado dois endereços, quando *Definir como principal* for executado em um deles (rascunho ou ativo), então só ele fica principal.
 - Dado um usuário `Comum`, quando tentar criar ou editar cliente, então recebe HTTP 403.
+- Dado um usuário `Comum`, então `Permissoes.somenteLeitura` é `true` e a app esconde Criar, Editar, Excluir, Importar e *Definir como principal*; para o `Admin` é `false`.
 - Dado um cliente com pedido, quando excluído, então a exclusão é bloqueada; sem pedido, é excluído.
 - Dado um upload de foto cuja assinatura não confere com o MIME, então é recusado.
 
@@ -915,7 +931,7 @@ Cada critério tem teste automatizado correspondente (seção 20).
 - Dado um pedido sem pagamento aprovado, quando aprovado, então é bloqueado; com pagamento aprovado, o estoque é baixado, os snapshots gerados e o pedido `FINALIZADO`.
 - Dado um pedido sem pagamento aprovado, quando cancelado com motivo, então a reserva é liberada, os snapshots gerados e o pedido `CANCELADO`; sem motivo, é bloqueado.
 - Dado um pedido pago, quando cancelado, então vai para `PROCESSANDO_REEMBOLSO`, mantém a reserva e cria o reembolso `PENDENTE`.
-- Dado um pedido em edição ou um rascunho, quando uma ação for executada, então é bloqueada.
+- Dado um pedido em edição ou um rascunho, quando uma ação for executada, então é bloqueada (HTTP 409, `ACAO_SOMENTE_ATIVO` no rascunho).
 
 ### 17.5 Reembolsos
 
@@ -928,6 +944,8 @@ Cada critério tem teste automatizado correspondente (seção 20).
 - Dada uma planilha válida, então todos os registros são criados; com qualquer erro, nada é gravado e os erros são listados por linha.
 - Dada uma planilha de pedidos cuja demanda total excede o disponível, então a importação é cancelada.
 - Dado um `Comum`, quando importar clientes ou estoque, então recebe HTTP 403.
+- Dado um item cadastrado como "Importado Caneta", quando a planilha trouxer "IMPORTADO CANETA", então a importação é recusada (nome já cadastrado).
+- Dado um `.xlsx` cujo conteúdo descompactado passa de 50 MB, então a leitura é recusada com mensagem de erro.
 - Os modelos de `docs/modelos-importacao` importam sem erro.
 - Dado um pedido importado com a referência P001 para um cliente, quando a mesma planilha é importada de novo, então é recusada (`o pedido P001 do cliente ... já foi importado`) e nada é gravado; outro cliente pode usar P001, e o cancelamento do pedido libera a referência.
 - As agregações `$apply` respondem nos quatro domínios, e a contagem de pedidos da análise fecha com o total de pedidos do serviço transacional.
@@ -985,18 +1003,19 @@ teste correspondente nas duas suítes.
 
 ## 20. Testes Automatizados
 
-68 testes por versão (`node:test` + `@cap-js/cds-test`), com um servidor ViaCEP falso local (sem
-rede externa) e um gerador de `.xlsx` mínimo. São permanentes, como a suíte ABAP Unit do RAP.
+71 testes na versão JavaScript e 73 na TypeScript (`node:test` + `@cap-js/cds-test`), com um
+servidor ViaCEP falso local (sem rede externa) e um gerador de `.xlsx` mínimo. São permanentes:
+devem ser mantidos e ajustados junto com as regras de negócio.
 
-| Arquivo | Cobertura | Classes de teste RAP equivalentes |
-|---|---|---|
-| `unidade.test` | CPF, e-mail, telefone, imagens, status de estoque, SKU, pagamento simulado, leitor XLSX/CSV | `ltcl_digitos_cpf`, `ltcl_email_imagem`, `ltcl_estoque_endereco`, testes de `ZCL_PC_PAGAMENTO_SIM` e `ZCL_PC_PLANILHA` |
-| `clientes.test` | Rascunho, ViaCEP, CEP geral, CEP único, endereço principal, CPF, autorização, exclusão, foto | `ltcl_persistencia_endereco` |
-| `estoque.test` | SKU, disponibilidade e status, concorrência com edição, inativação e exclusão | `ltcl_sku_item` |
-| `pedidos.test` | Registro com reserva, edição pela diferença, pagamento, aprovação, cancelamento, reembolso, campos somente leitura (cliente e pagamento) | `ltcl_registro_pedido`, `ltcl_edicao_pedido`, `ltcl_ciclo_pedido` |
-| `reembolsos.test` | Aprovar, rejeitar (motivo obrigatório), decisão única | `ltcl_reembolso` |
-| `importacao.test` | Clientes, estoque e pedidos (tudo ou nada), reimportação de pedidos recusada e modelos de `docs/` | testes de `ZCL_PC_IMPORTACAO` |
-| `analitico.test` | Agregações `$apply` dos quatro domínios | — |
+| Arquivo | Cobertura |
+|---|--- |
+| `unidade.test` | CPF, e-mail, telefone, imagens, status de estoque, SKU, pagamento simulado, leitor XLSX/CSV (inclusive o limite do conteúdo descompactado) |
+| `clientes.test` | Rascunho, ViaCEP, CEP geral, CEP único, endereço principal, CPF, autorização (inclusive `Permissoes`), exclusão, foto |
+| `estoque.test` | SKU, disponibilidade e status, concorrência com edição, inativação, exclusão e `Permissoes` |
+| `pedidos.test` | Registro com reserva, edição pela diferença, pagamento, aprovação, cancelamento (inclusive ações recusadas no rascunho), reembolso, campos somente leitura (cliente e pagamento) |
+| `reembolsos.test` | Aprovar, rejeitar (motivo obrigatório), decisão única |
+| `importacao.test` | Clientes, estoque e pedidos (tudo ou nada), nomes e pedidos já importados recusados e modelos de `docs/` |
+| `analitico.test` | Agregações `$apply` dos quatro domínios |
 
 As apps de análise têm testes **QUnit** (`app/analise-*/webapp/test/unit`) do catálogo de cenários
 (`Scenarios`) e da montagem das consultas (`AnalyticsQuery`), abertos no navegador com o servidor em
@@ -1051,21 +1070,9 @@ Estrutura de cada implementação (as diferenças estão marcadas):
 
 ---
 
-## 22. Diferenças em Relação ao RAP e à Versão 1 desta Especificação
+## 22. Histórico de Revisões desta Especificação
 
-### 22.1 RAP (`ZAVBS_PC`) × CAP
-
-| Tema | RAP | CAP |
-|---|---|---|
-| Numeração | Number Range Object `ZPC_NR` | Tabela `Numeracoes` com incremento atômico na transação |
-| Disponível/status do estoque | Colunas mantidas por determinations | Colunas geradas (`stored`) no banco |
-| Object Page dinâmica | Colunas `xfeld` persistidas (`AtualizarFlagsStatus`) | Elementos calculados na leitura |
-| CEP do endereço | Chave da tabela, somente leitura após gravar | Chave é só o `ID`: o CEP pode ser alterado |
-| Concorrência de estoque | Lock do BO Item via EML | `UPDATE` condicional atômico |
-| Autorização | IAM App, objetos `ZPC_ADMIN`/`ZPC_PEDIDO`, `c_modo_trial` | Papéis `Admin`/`Comum` com `@requires`/`@restrict` |
-| Leitor XLSX | XCO (sem `inlineStr`, recusa LibreOffice) | Leitor próprio (ZIP + XML), aceita ambos |
-
-### 22.2 O que mudou da versão 1 para a 2 desta especificação
+### 22.1 O que mudou da versão 1 para a 2
 
 | Tema | Versão 1 (planejada) | Versão 2 (implementada) |
 |---|---|---|
@@ -1089,7 +1096,7 @@ Estrutura de cada implementação (as diferenças estão marcadas):
 | Linguagem | Node.js | JavaScript e TypeScript |
 | Estrutura | `srv/handlers`, `srv/utils`, `.cdsrc.json`, `mta.yaml`, `xs-security.json` | Um serviço por app, `srv/lib`, configuração no `package.json`; MTA e XSUAA pendentes |
 
-### 22.3 Revisão 2.1
+### 22.2 Revisão 2.1
 
 | Tema | Versão 2.0 | Versão 2.1 |
 |---|---|---|
@@ -1098,7 +1105,7 @@ Estrutura de cada implementação (as diferenças estão marcadas):
 | Importação de pedidos | A mesma planilha podia ser importada várias vezes | `referenciaImportacao` (coluna Pedido) como chave de idempotência por cliente (seção 13.2) |
 | Testes | 63 por versão | 68 por versão |
 
-### 22.4 Revisão 2.2
+### 22.3 Revisão 2.2
 
 | Tema | Versão 2.1 | Versão 2.2 |
 |---|---|---|
@@ -1107,6 +1114,17 @@ Estrutura de cada implementação (as diferenças estão marcadas):
 | Efetuar Pagamento | Diálogo padrão do Fiori Elements, sem máscara | Diálogo próprio com máscara no cartão, validade e CVV (seção 15.3) |
 | Object Pages | Item histórico sem conteúdo; snapshots e reembolso sem link | Object Page do item no encerramento; links do snapshot do cliente e dos itens; link do pedido para o reembolso (seção 15.4) |
 | Launchpad | Cinco tiles; links por objeto semântico podiam não aparecer | Oito tiles; resolução de *intents* no cliente ligada |
+
+### 22.4 Revisão 2.3
+
+| Tema | Versão 2.2 | Versão 2.3 |
+|---|---|---|
+| Permissões na UI | O usuário `Comum` via Criar, Editar, Excluir e Importar em Clientes e Estoque (o backend recusava) | Singleton `Permissoes` esconde essas opções (seção 4) |
+| Ações no rascunho | Chamadas sobre o rascunho respondiam HTTP 501 (sem handler) | HTTP 409 com `ACAO_SOMENTE_ATIVO` (seção 8.4) |
+| Importação de estoque | Nome já cadastrado comparado com diferença de maiúsculas | Comparado sem diferenciar maiúsculas de minúsculas (seção 13.2) |
+| Leitor de `.xlsx` | Sem limite para o conteúdo descompactado | Até 50 MB por parte descompactada (seção 13.1) |
+| Código-fonte | Funções com documentação parcial | Comentários explicam a aplicação CAP; todas as funções documentadas (JSDoc/TSDoc) |
+| Testes | 68 por versão | 71 (JavaScript) e 73 (TypeScript) |
 
 ---
 

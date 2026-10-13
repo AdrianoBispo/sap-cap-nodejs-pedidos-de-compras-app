@@ -19,7 +19,7 @@
   <img src="https://img.shields.io/badge/SQLite-dev-003B57?style=for-the-badge&logo=sqlite&logoColor=white" alt="SQLite">
   <img src="https://img.shields.io/badge/API-ViaCEP-2E7D32?style=for-the-badge" alt="API ViaCEP">
   <br>
-  <img src="https://img.shields.io/badge/testes-68%20por%20vers%C3%A3o-9C3493?style=for-the-badge" alt="68 testes por versão">
+  <img src="https://img.shields.io/badge/testes-71%20JS%20%7C%2073%20TS-9C3493?style=for-the-badge" alt="71 testes em JavaScript e 73 em TypeScript">
   <img src="https://img.shields.io/badge/ESLint-10-4B32C3?style=for-the-badge&logo=eslint&logoColor=white" alt="ESLint 10">
   <img src="https://img.shields.io/github/last-commit/AdrianoBispo/sap-cap-nodejs-pedidos-de-compras-app?style=for-the-badge" alt="Último commit">
   <img src="https://img.shields.io/github/repo-size/AdrianoBispo/sap-cap-nodejs-pedidos-de-compras-app?style=for-the-badge" alt="Tamanho do repositório">
@@ -52,7 +52,6 @@
 - [Importação em massa por planilha](#importação-em-massa-por-planilha)
 - [Rascunhos (draft)](#rascunhos-draft)
 - [Análises](#análises)
-- [Diferenças em relação ao RAP](#diferenças-em-relação-ao-rap)
 - [Limitações conhecidas e pendências](#limitações-conhecidas-e-pendências)
 - [Histórico de versões](#histórico-de-versões)
 - [Documentação](#documentação)
@@ -62,9 +61,9 @@
 
 ## Sobre o projeto
 
-Porte para o **SAP CAP 10** da aplicação de Pedidos de Compras construída originalmente em
-**SAP RAP / ABAP Cloud** ([sap-abap-rap-pedidos-de-compras-app](https://github.com/AdrianoBispo/sap-abap-rap-pedidos-de-compras-app),
-pacote `ZAVBS_PC`). O repositório traz **duas implementações equivalentes** do mesmo sistema:
+Sistema de Pedidos de Compras em **SAP CAP 10**: cadastro de clientes e de itens de estoque, pedidos
+com reserva de estoque, pagamento simulado, reembolsos, importação por planilha e análises. O
+repositório traz **duas implementações equivalentes** do mesmo sistema:
 
 | Pasta | Implementação | Detalhes |
 | --- | --- | --- |
@@ -75,16 +74,16 @@ As duas compartilham o mesmo modelo CDS, os mesmos serviços OData V4, as mesmas
 os mesmos dados de demonstração e a mesma suíte de testes. Muda apenas a linguagem dos handlers, das
 regras de domínio, dos testes e dos scripts.
 
-| App | O que gerencia | Serviço OData V4 | Equivalente RAP |
-| --- | --- | --- | --- |
-| Gestão de Clientes | Clientes e seus endereços, com preenchimento via ViaCEP | `ClientesService` (`/odata/v4/clientes`) | `ZUI_PC_CLIENTES` |
-| Gestão de Estoque | Itens (SKU, foto, categoria, descrição), disponibilidade e status | `EstoqueService` (`/odata/v4/estoque`) | `ZUI_PC_ESTOQUE` |
-| Pedidos de Compras | Pedidos, itens, pagamento simulado, cancelamento e histórico (snapshots) | `PedidosService` (`/odata/v4/pedidos`) | `ZUI_PC_PEDIDOS_COMPRAS` |
-| Gestão de Reembolsos | Aprovação e rejeição de reembolsos de pedidos cancelados com pagamento aprovado | `ReembolsosService` (`/odata/v4/reembolsos`) | `ZUI_PC_REEMBOLSOS` |
-| Análise de Pedidos de Compras | Indicadores e 5 gráficos dos pedidos (valor, status, pagamento, UF, mês) | `AnaliticoService` (`/odata/v4/analitico`) | `ZUI_PC_ANALITICO` |
-| Análise de Clientes | Indicadores e 5 gráficos dos clientes (gênero, UF, score, cadastros) | `AnaliticoService` | `ZUI_PC_ANALITICO` |
-| Análise de Itens do Estoque | Indicadores e 5 gráficos do estoque (categoria, situação, reservas, valor) | `AnaliticoService` | `ZUI_PC_ANALITICO` |
-| Análise de Pedidos de Reembolsos | Indicadores e 5 gráficos dos reembolsos (status, mês, UF, motivo) | `AnaliticoService` | `ZUI_PC_ANALITICO` |
+| App | O que gerencia | Serviço OData V4 |
+| --- | --- | --- |
+| Gestão de Clientes | Clientes e seus endereços, com preenchimento via ViaCEP | `ClientesService` (`/odata/v4/clientes`) |
+| Gestão de Estoque | Itens (SKU, foto, categoria, descrição), disponibilidade e status | `EstoqueService` (`/odata/v4/estoque`) |
+| Pedidos de Compras | Pedidos, itens, pagamento simulado, cancelamento e histórico (snapshots) | `PedidosService` (`/odata/v4/pedidos`) |
+| Gestão de Reembolsos | Aprovação e rejeição de reembolsos de pedidos cancelados com pagamento aprovado | `ReembolsosService` (`/odata/v4/reembolsos`) |
+| Análise de Pedidos de Compras | Indicadores e 5 gráficos dos pedidos (valor, status, pagamento, UF, mês) | `AnaliticoService` (`/odata/v4/analitico`) |
+| Análise de Clientes | Indicadores e 5 gráficos dos clientes (gênero, UF, score, cadastros) | `AnaliticoService` |
+| Análise de Itens do Estoque | Indicadores e 5 gráficos do estoque (categoria, situação, reservas, valor) | `AnaliticoService` |
+| Análise de Pedidos de Reembolsos | Indicadores e 5 gráficos dos reembolsos (status, mês, UF, motivo) | `AnaliticoService` |
 
 > [!NOTE]
 > Em desenvolvimento o banco é **SQLite em memória**, recriado a cada inicialização com os dados de
@@ -156,7 +155,9 @@ regras de domínio, dos testes e dos scripts.
   SKU abrem o item e *Solicitação de reembolso* abre o reembolso do pedido; no histórico do pedido
   (snapshots), cliente e item também abrem as apps de origem; no reembolso, o Pedido abre o pedido e
   Cliente e CPF abrem o cliente.
-- **Autorização** por papel: `Admin` e `Comum` (`@requires` / `@restrict`).
+- **Autorização** por papel: `Admin` e `Comum` (`@requires` / `@restrict`). Para o usuário só de
+  consulta, as apps de Clientes e Estoque escondem Criar, Editar, Excluir, Importar e *Definir como
+  principal* (singleton `Permissoes`).
 - **Concorrência** de estoque com `UPDATE` condicional atômico na transação da requisição.
 
 ---
@@ -172,7 +173,7 @@ regras de domínio, dos testes e dos scripts.
 | Front-end | SAPUI5 1.148 (LTS): Fiori Elements V4 (List Report + Object Page) e apps freestyle, servidos pelo `cds-plugin-ui5` |
 | Integração | ViaCEP via `fetch` nativo (URL em `cds.requires.viacep`) |
 | Ferramentas | `@sap/cds-dk` 10, SAP Fiori tools (geração das apps), UI5 linter, ESLint 10, `local-ssl-proxy` (HTTPS local) |
-| Testes | `node:test` + `@cap-js/cds-test` (68 testes por versão), ViaCEP falso local |
+| Testes | `node:test` + `@cap-js/cds-test` (71 testes em JavaScript, 73 em TypeScript), ViaCEP falso local |
 
 ---
 
@@ -219,7 +220,7 @@ flowchart LR
     LIB --> VIACEP[("API ViaCEP")]
 ```
 
-Cada aplicação tem seu próprio serviço (como os `ZUI_PC_*` do RAP). As regras que atravessam
+Cada aplicação tem seu próprio serviço OData. As regras que atravessam
 domínios — movimentação de estoque, snapshots, cancelamento e reembolso — ficam em `srv/lib` e rodam
 sempre na transação da requisição: qualquer erro desfaz tudo.
 
@@ -250,7 +251,7 @@ stateDiagram-v2
 ```text
 .
 ├── nodejs-padrao/                     implementação em JavaScript (ESM)
-│   ├── _i18n/messages.properties      mensagens de negócio (porte da message class ZPC_MSG)
+│   ├── _i18n/messages.properties      mensagens de negócio
 │   ├── app/
 │   │   ├── common.cds                 rótulos, textos de CodeList, campos somente leitura
 │   │   ├── services.cds               reúne as anotações das apps
@@ -266,11 +267,11 @@ stateDiagram-v2
 │   │   └── launchpad/                 configuração e inicialização do launchpad
 │   ├── db/
 │   │   ├── common.cds                 tipos e CodeLists
-│   │   ├── schema.cds                 entidades (porte das tabelas ZTA_PC_*)
+│   │   ├── schema.cds                 entidades
 │   │   └── data/                      CodeLists e dados de demonstração (CSV)
 │   ├── srv/
 │   │   ├── *-service.cds              um serviço por aplicação + analitico-service.cds
-│   │   ├── *-service.js               handlers (porte das behavior pools ZBP_R_PC_*)
+│   │   ├── *-service.js               handlers dos serviços
 │   │   ├── validacoes.cds             @mandatory / @assert
 │   │   └── lib/                       regras de domínio reutilizáveis
 │   ├── scripts/gerar-dados-demo.js    gerador dos CSVs de demonstração
@@ -293,18 +294,18 @@ stateDiagram-v2
 
 ### Convenção de arquivos
 
-| Arquivo | Conteúdo | Equivalente RAP |
-| --- | --- | --- |
-| `db/schema.cds`, `db/common.cds` | Entidades, tipos e CodeLists | Tabelas `ZTA_PC_*` + CDS `ZR_PC_*` + `ZTA_PC_CODELIST` |
-| `db/data/*.csv` | Dados iniciais (`<namespace>-<Entidade>.csv`) | `ZCL_PC_SETUP` / `ZCL_SETUP_*` |
-| `srv/*-service.cds` | Serviços e projeções expostas | Projections `ZC_PC_*_APP` + Service Definitions `ZUI_PC_*` |
-| `srv/*-service.js` / `.ts` | Handlers (`before`/`on`/`after`) | Behavior pools `ZBP_R_PC_*` |
-| `srv/validacoes.cds` | Validações declarativas | Validations simples das BDEFs |
-| `srv/lib/*` | Regras de domínio reutilizáveis | Classes `ZCL_PC_*` e EML entre BOs |
-| `app/<app>/annotations.cds` | Anotações de UI | Metadata Extensions `ZC_PC_*_APP` (`.ddlx`) |
-| `app/<app>/webapp/manifest.json` | Rotas, páginas, tabelas, ações customizadas, tile | `manifest.json` das apps em `ui5/` |
-| `_i18n/messages.properties` | Mensagens de negócio | Message Class `ZPC_MSG` |
-| `test/*.test.js` / `.ts` | Testes automatizados | Classes de teste ABAP Unit |
+| Arquivo | Conteúdo |
+| --- | --- |
+| `db/schema.cds`, `db/common.cds` | Entidades, tipos e CodeLists |
+| `db/data/*.csv` | Dados iniciais (`<namespace>-<Entidade>.csv`) |
+| `srv/*-service.cds` | Serviços e projeções expostas |
+| `srv/*-service.js` / `.ts` | Handlers (`before`/`on`/`after`) |
+| `srv/validacoes.cds` | Validações declarativas |
+| `srv/lib/*` | Regras de domínio reutilizáveis |
+| `app/<app>/annotations.cds` | Anotações de UI |
+| `app/<app>/webapp/manifest.json` | Rotas, páginas, tabelas, ações customizadas, tile |
+| `_i18n/messages.properties` | Mensagens de negócio |
+| `test/*.test.js` / `.ts` | Testes automatizados |
 
 ---
 
@@ -330,8 +331,8 @@ npm run watch            # serviços + apps em http://localhost:4004
 
 Abra `http://localhost:4004/launchpad.html` (launchpad com os oito tiles) ou a página inicial do
 CAP, que lista serviços e apps. O banco SQLite em memória é recriado a cada inicialização com os dados
-de `db/data`: 100 clientes, 100 itens e 100 pedidos em todos os status (porte das classes
-`ZCL_SETUP_*`). Para regenerar os CSVs: `npm run dados:demo`.
+de `db/data`: 100 clientes, 100 itens e 100 pedidos em todos os status. Para regenerar os CSVs:
+`npm run dados:demo`.
 
 Para testar em **HTTPS** local (ex.: recursos do navegador que exigem contexto seguro), deixe o
 `watch` rodando e, em outro terminal, execute `npm run https`: o `local-ssl-proxy` publica
@@ -351,7 +352,7 @@ Autenticação *mocked* do CAP:
 | Script | JavaScript | TypeScript |
 | --- | --- | --- |
 | `npm run watch` | `cds watch` | `cds-tsx watch` (executa os `.ts` com `tsx`) |
-| `npm test` | 68 testes (`node --test`) | `typer` + 68 testes (`node --import tsx --test`) |
+| `npm test` | 71 testes (`node --test`) | `typer` + 73 testes (`node --import tsx --test`) |
 | `npm run lint` | ESLint | ESLint + `typecheck` |
 | `npm run typecheck` | — | `cds-typer` + `tsc --noEmit` |
 | `npm run build` | — | `cds build --production` (JavaScript em `gen/srv`) |
@@ -443,18 +444,18 @@ npm test         # em nodejs-padrao ou nodejs-typescript
 ```
 
 Os testes sobem o servidor com `cds.test`, usam um **ViaCEP falso local** (sem rede externa) e um
-gerador mínimo de `.xlsx`. **São permanentes**, como a suíte ABAP Unit do RAP: devem ser mantidos e
-ajustados junto com as regras de negócio. São 68 testes por versão, todos passando:
+gerador mínimo de `.xlsx`. **São permanentes**: devem ser mantidos e ajustados junto com as regras
+de negócio. São 71 testes em JavaScript e 73 em TypeScript, todos passando:
 
-| Arquivo | Cobre | Classes de teste RAP equivalentes |
-| --- | --- | --- |
-| `unidade.test` | CPF, e-mail, telefone, imagens, status de estoque, SKU, pagamento simulado, leitor XLSX/CSV | `ltcl_digitos_cpf`, `ltcl_email_imagem`, `ltcl_estoque_endereco`, `ZCL_PC_PAGAMENTO_SIM`, `ZCL_PC_PLANILHA` |
-| `clientes.test` | Rascunho, ViaCEP, CEP geral, CEP único, endereço principal, CPF, autorização, exclusão, foto | `ltcl_persistencia_endereco` |
-| `estoque.test` | SKU, disponibilidade e status, concorrência com edição, inativação e exclusão | `ltcl_sku_item` |
-| `pedidos.test` | Registro com reserva, edição pela diferença, pagamento, aprovação, cancelamento, reembolso, campos somente leitura | `ltcl_registro_pedido`, `ltcl_edicao_pedido`, `ltcl_ciclo_pedido` |
-| `reembolsos.test` | Aprovar, rejeitar (motivo obrigatório), decisão única | `ltcl_reembolso` |
-| `importacao.test` | Clientes, estoque e pedidos (tudo ou nada), reimportação de pedidos recusada e os modelos de `docs/modelos-importacao` | `ZCL_PC_IMPORTACAO` |
-| `analitico.test` | Agregações `$apply` dos quatro domínios | — |
+| Arquivo | Cobre |
+| --- | --- |
+| `unidade.test` | CPF, e-mail, telefone, imagens, status de estoque, SKU, pagamento simulado, leitor XLSX/CSV (inclusive o limite do conteúdo descompactado) |
+| `clientes.test` | Rascunho, ViaCEP, CEP geral, CEP único, endereço principal, CPF, autorização (inclusive `Permissoes`), exclusão, foto |
+| `estoque.test` | SKU, disponibilidade e status, concorrência com edição, inativação, exclusão e `Permissoes` |
+| `pedidos.test` | Registro com reserva, edição pela diferença, pagamento, aprovação, cancelamento (inclusive ações recusadas no rascunho), reembolso, campos somente leitura |
+| `reembolsos.test` | Aprovar, rejeitar (motivo obrigatório), decisão única |
+| `importacao.test` | Clientes, estoque e pedidos (tudo ou nada), nomes e pedidos já importados recusados e os modelos de `docs/modelos-importacao` |
+| `analitico.test` | Agregações `$apply` dos quatro domínios |
 
 Os testes rodam sem o `cds-plugin-ui5` (`CDS_PLUGIN_UI5_ACTIVE=false`), porque exercitam só o backend.
 
@@ -527,8 +528,7 @@ sequenceDiagram
 - **CEP único por cliente, não global**: o mesmo cliente não pode ter dois endereços com o mesmo CEP
   (validação no Save + restrição `UNIQUE (cliente_ID, cep)` no banco), mas clientes diferentes podem
   compartilhar um CEP.
-- **CEP pode ser alterado** depois de gravado: no CAP a chave do endereço é só o `ID`. (No RAP o CEP
-  fazia parte da chave da tabela e ficava somente leitura.)
+- **CEP pode ser alterado** depois de gravado: a chave do endereço é só o `ID`.
 
 ---
 
@@ -564,12 +564,14 @@ os registros de uma vez. Modelos prontos estão em [`docs/modelos-importacao/`](
 - A primeira linha não vazia é o cabeçalho; nomes de coluna sem diferença de acento, caixa ou
   pontuação, e com sinônimos. CSV com `;`, `,` ou tabulação, UTF-8 (com ou sem BOM) ou Windows-1252.
 - XLSX lido sem bibliotecas externas (ZIP + XML): aceita textos compartilhados e *inline* (inclusive
-  arquivos do LibreOffice). `.xls` antigo não é aceito. Máximo de **500 linhas**.
+  arquivos do LibreOffice). `.xls` antigo não é aceito. Máximo de **500 linhas** e de 50 MB por parte
+  descompactada do arquivo.
 - **Tudo ou nada**: todas as linhas são validadas antes de gravar; qualquer erro cancela a importação
   e lista o motivo por linha (no máximo 15, mais o total omitido).
 - A criação passa pelo próprio serviço, então valem as mesmas regras da tela (CPF, ViaCEP, SKU,
   número do pedido, reserva de estoque).
-- **Sem duplicidade**: clientes (CPF) e itens (nome) já cadastrados são recusados. Nos pedidos, a
+- **Sem duplicidade**: clientes (CPF) e itens (nome, sem diferenciar maiúsculas de minúsculas) já
+  cadastrados são recusados. Nos pedidos, a
   coluna **Pedido** é gravada como *Referência de importação* (somente leitura, até 40 caracteres) e
   funciona como chave de idempotência: a mesma referência para o mesmo cliente é recusada enquanto
   houver pedido não cancelado com ela (`Linha 2: o pedido P001 do cliente 100.003.571-97 já foi
@@ -583,7 +585,7 @@ os registros de uma vez. Modelos prontos estão em [`docs/modelos-importacao/`](
 
 Clientes (com endereços), Itens e Pedidos (com itens, pagamento e snapshots) usam o rascunho do CAP
 (`@odata.draft.enabled`). As tabelas de rascunho são geradas automaticamente
-(`<Serviço>_<Entidade>_drafts`); não há tabelas `_D` a manter, como no RAP. Eventos usados:
+(`<Serviço>_<Entidade>_drafts`), sem tabelas a manter manualmente. Eventos usados:
 
 | Evento | Onde | Uso |
 | --- | --- | --- |
@@ -601,8 +603,8 @@ Camada analítica **somente leitura**: `AnaliticoService` expõe `PedidosAnalise
 `ItensAnalise` e `ReembolsosAnalise`, com dimensões e medidas (`@Aggregation.default`, expostas como
 *custom aggregates*), o que permite `$apply=groupby/aggregate` no servidor.
 
-O front-end são quatro apps **freestyle** (porte da app de análises do projeto RAP, dividida por
-domínio), cada uma com barra de filtros, indicadores, 5 gráficos e uma página de detalhe por análise
+O front-end são quatro apps **freestyle**, uma por domínio, cada uma com barra de filtros,
+indicadores, 5 gráficos e uma página de detalhe por análise
 (gráfico ampliado e tabela), num total de 20 análises:
 
 | App | Entidade | Indicadores | Análises |
@@ -615,24 +617,6 @@ domínio), cada uma com barra de filtros, indicadores, 5 gráficos e uma página
 As quatro compartilham a mesma estrutura (`model/Scenarios.js` com as medidas, dimensões e cenários
 do domínio, `model/AnalyticsQuery.js` para o `$apply`, `control/AnalysisChart.js` e `FilterBar.js`) e
 o botão *Abrir gestão* navega para a app de gestão do domínio.
-
----
-
-## Diferenças em relação ao RAP
-
-| Tema | RAP (`ZAVBS_PC`) | CAP |
-| --- | --- | --- |
-| Persistência | Tabelas `ZTA_PC_*` + `ZTA_PC_*_D` | Entidades CDS; tabelas de rascunho geradas |
-| Numeração | Number Range Object `ZPC_NR` | Tabela `Numeracoes` com incremento atômico na transação |
-| Disponível/status do estoque | Colunas mantidas por determinations | Colunas geradas (`stored`) no banco |
-| Object Page dinâmica | Colunas `xfeld` persistidas (`AtualizarFlagsStatus`) | Elementos calculados na leitura |
-| CEP do endereço | Chave da tabela, somente leitura após gravar | Chave é só o `ID`: o CEP pode ser alterado |
-| Concorrência de estoque | Lock do BO Item via EML | `UPDATE` condicional atômico |
-| Autorização | IAM App, objetos `ZPC_ADMIN`/`ZPC_PEDIDO`, `c_modo_trial` | Papéis `Admin`/`Comum` com `@requires`/`@restrict` |
-| Mensagens | Message Class `ZPC_MSG` (73 caracteres) | `_i18n/messages.properties` com parâmetros nomeados |
-| Leitor XLSX | XCO (sem `inlineStr`, recusa LibreOffice) | Leitor próprio (ZIP + XML), aceita ambos |
-| Testes | ABAP Unit | `node:test` + `@cap-js/cds-test` |
-| Launchpad | Fiori Launchpad / SAP Build Work Zone | Sandbox local (`launchpad.html`) |
 
 ---
 
@@ -652,10 +636,11 @@ o botão *Abrir gestão* navega para a app de gestão do domínio.
 
 | Versão | Mudanças |
 | --- | --- |
+| v1.6 | Revisão do código: comentários explicam só a aplicação CAP e todas as funções foram documentadas (JSDoc/TSDoc); importação de estoque recusa nome já cadastrado sem diferenciar maiúsculas; leitor de `.xlsx` limita o conteúdo descompactado a 50 MB; ações do pedido chamadas no rascunho devolvem 409 em vez de 501; singleton `Permissoes` esconde as ações de alteração do usuário só de consulta em Clientes e Estoque; 71 testes em JavaScript e 73 em TypeScript; especificação técnica 2.3 |
 | v1.5 | Análises divididas em quatro apps (Análise de Pedidos de Compras, de Clientes, de Itens do Estoque e de Pedidos de Reembolsos), com tiles próprios no launchpad e testes QUnit corrigidos; máscara de digitação no diálogo *Efetuar Pagamento*; navegações das Object Pages completadas (pedido → reembolso, histórico do cliente e dos itens → apps de origem, Object Page do item no encerramento); especificação técnica 2.2 |
 | v1.4 | Importação de pedidos sem duplicidade: a coluna Pedido vira a *Referência de importação* do pedido, e a mesma referência para o mesmo cliente é recusada enquanto houver pedido não cancelado com ela; 68 testes por versão; especificação técnica 2.1 |
 | v1.3 | Navegação entre aplicações: no pedido, Cliente/CPF → Gestão de Clientes e Item/SKU → Gestão de Estoque; no reembolso, Pedido → Pedidos de Compras e Cliente/CPF → Gestão de Clientes; `skuItem` em `ItensPedido` e CPF sem formatação em `Reembolsos` para o contexto da navegação |
-| v1.2 | Correção no pedido: só o cliente (na criação) e os itens são informados; dados do cliente lidos pela associação e somente leitura (antes apareciam editáveis e obrigatórios e ficavam vazios no rascunho); pagamento e snapshots somente leitura, gravados só pelas ações; observação somente leitura na tela; testes de regressão (66 por versão); README principal no modelo do projeto RAP |
+| v1.2 | Correção no pedido: só o cliente (na criação) e os itens são informados; dados do cliente lidos pela associação e somente leitura (antes apareciam editáveis e obrigatórios e ficavam vazios no rascunho); pagamento e snapshots somente leitura, gravados só pelas ações; observação somente leitura na tela; testes de regressão (66 por versão); README principal reestruturado |
 | v1.1 | Versão TypeScript (`nodejs-typescript`, `cds-typer`, `tsx`); especificação técnica 2.0 (.md e .docx); proxy HTTPS local (`npm run https`) |
 | v1.0 | Versão JavaScript (`nodejs-padrao`): modelo, serviços, regras de negócio, cinco apps SAPUI5, launchpad local, importação por planilha, camada analítica, dados de demonstração e suíte de testes |
 
@@ -668,7 +653,7 @@ o botão *Abrir gestão* navega para a app de gestão do domínio.
 - [README da implementação JavaScript](nodejs-padrao/README.md).
 - [README da implementação TypeScript](nodejs-typescript/README.md).
 - [Modelos de importação](docs/modelos-importacao).
-- Projeto original em RAP: [sap-abap-rap-pedidos-de-compras-app](https://github.com/AdrianoBispo/sap-abap-rap-pedidos-de-compras-app).
+- Aplicação em SAP RAP / ABAP Cloud: [sap-abap-rap-pedidos-de-compras-app](https://github.com/AdrianoBispo/sap-abap-rap-pedidos-de-compras-app).
 
 ---
 

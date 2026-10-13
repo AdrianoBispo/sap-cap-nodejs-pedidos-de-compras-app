@@ -1,7 +1,7 @@
 # Pedidos de Compras — SAP CAP (Node.js + JavaScript)
 
-Porte para o **SAP Cloud Application Programming Model (CAP) 10** da aplicação de Pedidos de
-Compras construída em SAP RAP (pacote `ZAVBS_PC`). Backend em **Node.js (ESM, JavaScript)**,
+Sistema de Pedidos de Compras no **SAP Cloud Application Programming Model (CAP) 10**. Backend em
+**Node.js (ESM, JavaScript)**,
 banco **SQLite** em desenvolvimento e oito aplicações **SAPUI5** (quatro Fiori Elements de gestão e
 quatro freestyle de análise) servidas pelo próprio CAP.
 
@@ -11,17 +11,17 @@ quatro freestyle de análise) servidas pelo próprio CAP.
 
 ## Aplicações
 
-| Aplicação | Caminho | Serviço OData V4 | Equivalente RAP |
-| --- | --- | --- | --- |
-| Gestão de Clientes | `/gestaoclientes/index.html` | `/odata/v4/clientes` (`ClientesService`) | `ZUI_PC_CLIENTES` |
-| Gestão de Estoque | `/gestaoestoque/index.html` | `/odata/v4/estoque` (`EstoqueService`) | `ZUI_PC_ESTOQUE` |
-| Pedidos de Compras | `/pedidoscompras/index.html` | `/odata/v4/pedidos` (`PedidosService`) | `ZUI_PC_PEDIDOS_COMPRAS` |
-| Gestão de Reembolsos | `/gestaoreembolsos/index.html` | `/odata/v4/reembolsos` (`ReembolsosService`) | `ZUI_PC_REEMBOLSOS` |
-| Análise de Pedidos de Compras | `/analisepedidos/index.html` | `/odata/v4/analitico` (`AnaliticoService`) | `ZUI_PC_ANALITICO` |
-| Análise de Clientes | `/analiseclientes/index.html` | `/odata/v4/analitico` (`AnaliticoService`) | `ZUI_PC_ANALITICO` |
-| Análise de Itens do Estoque | `/analiseestoque/index.html` | `/odata/v4/analitico` (`AnaliticoService`) | `ZUI_PC_ANALITICO` |
-| Análise de Pedidos de Reembolsos | `/analisereembolsos/index.html` | `/odata/v4/analitico` (`AnaliticoService`) | `ZUI_PC_ANALITICO` |
-| Launchpad local | `/launchpad.html` | — | Fiori Launchpad / Work Zone |
+| Aplicação | Caminho | Serviço OData V4 |
+| --- | --- | --- |
+| Gestão de Clientes | `/gestaoclientes/index.html` | `/odata/v4/clientes` (`ClientesService`) |
+| Gestão de Estoque | `/gestaoestoque/index.html` | `/odata/v4/estoque` (`EstoqueService`) |
+| Pedidos de Compras | `/pedidoscompras/index.html` | `/odata/v4/pedidos` (`PedidosService`) |
+| Gestão de Reembolsos | `/gestaoreembolsos/index.html` | `/odata/v4/reembolsos` (`ReembolsosService`) |
+| Análise de Pedidos de Compras | `/analisepedidos/index.html` | `/odata/v4/analitico` (`AnaliticoService`) |
+| Análise de Clientes | `/analiseclientes/index.html` | `/odata/v4/analitico` (`AnaliticoService`) |
+| Análise de Itens do Estoque | `/analiseestoque/index.html` | `/odata/v4/analitico` (`AnaliticoService`) |
+| Análise de Pedidos de Reembolsos | `/analisereembolsos/index.html` | `/odata/v4/analitico` (`AnaliticoService`) |
+| Launchpad local | `/launchpad.html` | — |
 
 ## Tecnologias
 
@@ -32,7 +32,7 @@ quatro freestyle de análise) servidas pelo próprio CAP.
 | Serviços | OData V4 com rascunho (draft), `@restrict`, `@assert`/`@mandatory`, `$apply` |
 | Front-end | SAPUI5 1.148 (LTS): Fiori Elements V4 (List Report/Object Page) e apps freestyle, `cds-plugin-ui5` |
 | Integração | ViaCEP (`fetch` nativo, URL em `cds.requires.viacep`) |
-| Qualidade | `node:test` + `@cap-js/cds-test` (68 testes), ESLint 10, UI5 linter |
+| Qualidade | `node:test` + `@cap-js/cds-test` (71 testes), ESLint 10, UI5 linter |
 
 ## Como executar
 
@@ -47,7 +47,7 @@ CAP. Usuários de desenvolvimento (autenticação *mocked*):
 | Usuário | Senha | Papel | Permissões |
 | --- | --- | --- | --- |
 | `admin` | `admin` | `Admin` | Tudo: clientes, estoque, pedidos, reembolsos e análises |
-| `comum` | `comum` | `Comum` | Consulta clientes e estoque; cria e opera pedidos; decide reembolsos; análises |
+| `comum` | `comum` | `Comum` | Consulta clientes e estoque (as apps escondem Criar, Editar, Excluir e Importar); cria e opera pedidos; decide reembolsos; análises |
 
 O banco é recriado a cada inicialização com os dados de demonstração de `db/data` (100 clientes,
 100 itens e 100 pedidos em todos os status). Para regenerar os CSVs: `npm run dados:demo`.
@@ -55,21 +55,20 @@ O banco é recriado a cada inicialização com os dados de demonstração de `db
 ## Testes e lint
 
 ```sh
-npm test             # 68 testes (unidade + serviços), com ViaCEP falso local
+npm test             # 71 testes (unidade + serviços), com ViaCEP falso local
 npm run lint         # ESLint (configuração recomendada do CAP)
 ```
 
-Os testes são permanentes, como a suíte ABAP Unit do projeto RAP: devem ser mantidos e ajustados
-junto com as regras de negócio.
+Os testes são permanentes: devem ser mantidos e ajustados junto com as regras de negócio.
 
 | Arquivo | Cobertura |
 | --- | --- |
-| `test/unidade.test.js` | CPF, e-mail, telefone, imagens, status de estoque, SKU, pagamento simulado, leitor XLSX/CSV |
-| `test/clientes.test.js` | rascunho, ViaCEP, CEP geral, CEP único, endereço principal, CPF, autorização, exclusão, foto |
-| `test/estoque.test.js` | SKU, disponibilidade e status, concorrência com edição, inativação e exclusão |
-| `test/pedidos.test.js` | registro com reserva, edição pela diferença, pagamento, aprovação, cancelamento, reembolso, campos somente leitura |
+| `test/unidade.test.js` | CPF, e-mail, telefone, imagens, status de estoque, SKU, pagamento simulado, leitor XLSX/CSV (inclusive o limite do conteúdo descompactado) |
+| `test/clientes.test.js` | rascunho, ViaCEP, CEP geral, CEP único, endereço principal, CPF, autorização (inclusive `Permissoes`), exclusão, foto |
+| `test/estoque.test.js` | SKU, disponibilidade e status, concorrência com edição, inativação, exclusão e `Permissoes` |
+| `test/pedidos.test.js` | registro com reserva, edição pela diferença, pagamento, aprovação, cancelamento (inclusive ações recusadas no rascunho), reembolso, campos somente leitura |
 | `test/reembolsos.test.js` | aprovar, rejeitar (motivo obrigatório), decisão única |
-| `test/importacao.test.js` | importação de clientes, estoque e pedidos (tudo ou nada), reimportação de pedidos recusada e dos modelos em `docs/` |
+| `test/importacao.test.js` | importação de clientes, estoque e pedidos (tudo ou nada), nomes e pedidos já importados recusados e dos modelos em `docs/` |
 | `test/analitico.test.js` | agregações `$apply` dos quatro domínios |
 
 As apps de análise têm testes QUnit em `app/analise-*/webapp/test`, abertos no navegador com
@@ -79,7 +78,7 @@ As apps de análise têm testes QUnit em `app/analise-*/webapp/test`, abertos no
 
 ```text
 nodejs-padrao/
-├── _i18n/messages.properties    mensagens de negócio (porte da message class ZPC_MSG)
+├── _i18n/messages.properties    mensagens de negócio
 ├── app/
 │   ├── common.cds               rótulos, textos de CodeList, campos somente leitura
 │   ├── services.cds             reúne as anotações das apps
@@ -95,11 +94,11 @@ nodejs-padrao/
 │   └── launchpad/               configuração e inicialização do launchpad
 ├── db/
 │   ├── common.cds               tipos e CodeLists
-│   ├── schema.cds               entidades (porte das tabelas ZTA_PC_*)
+│   ├── schema.cds               entidades
 │   └── data/                    CodeLists e dados de demonstração (CSV)
 ├── srv/
 │   ├── *-service.cds            serviços (um por aplicação) + analitico-service.cds
-│   ├── *-service.js             handlers (porte das behavior pools ZBP_R_PC_*)
+│   ├── *-service.js             handlers dos serviços
 │   ├── validacoes.cds           @mandatory / @assert
 │   └── lib/                     regras de domínio reutilizáveis
 ├── scripts/gerar-dados-demo.js  gerador dos CSVs de demonstração
@@ -126,23 +125,15 @@ nodejs-padrao/
   abrem o item e *Solicitação de reembolso* abre o reembolso; no histórico (snapshots), cliente e item
   abrem as apps de origem; no reembolso, o Pedido abre o pedido e Cliente/CPF abrem o cliente; nas
   análises, *Abrir gestão* abre a app de gestão do domínio.
+- **Permissões na UI**: o singleton `Permissoes` (`somenteLeitura`) faz as apps de Clientes e
+  Estoque esconderem Criar, Editar, Excluir, Importar e *Definir como principal* do usuário sem o
+  papel `Admin`; o `@restrict` continua barrando a alteração no backend.
 - **Concorrência**: cada movimento de estoque é um `UPDATE` condicional atômico ("só reserva se o
   saldo atual cobre a quantidade"); qualquer erro desfaz a transação inteira.
-- **Importação por planilha** (`.xlsx`/`.csv`) em Clientes, Estoque e Pedidos, tudo ou nada; a
-  referência do pedido (coluna Pedido) não é reimportada para o mesmo cliente; modelos
+- **Importação por planilha** (`.xlsx`/`.csv`) em Clientes, Estoque e Pedidos, tudo ou nada; item
+  com nome já cadastrado (sem diferenciar maiúsculas) é recusado e a referência do pedido (coluna
+  Pedido) não é reimportada para o mesmo cliente; modelos
   em [`../docs/modelos-importacao`](../docs/modelos-importacao).
-
-## Diferenças em relação ao RAP
-
-| Tema | RAP (`ZAVBS_PC`) | CAP |
-| --- | --- | --- |
-| Numeração | Number Range Object `ZPC_NR` | Tabela `Numeracoes` com incremento atômico na transação |
-| Disponível/status do estoque | Colunas mantidas por determinations | Colunas geradas (`stored`) no banco |
-| Object Page dinâmica | Colunas `xfeld` persistidas (`AtualizarFlagsStatus`) | Elementos calculados na leitura |
-| CEP do endereço | Chave da tabela, somente leitura após gravar | Chave é só o `ID`: o CEP pode ser alterado |
-| Concorrência de estoque | Lock do BO Item via EML | `UPDATE` condicional atômico |
-| Autorização | IAM App, objetos `ZPC_ADMIN`/`ZPC_PEDIDO`, `c_modo_trial` | Papéis `Admin`/`Comum` com `@requires`/`@restrict` |
-| Leitor XLSX | XCO (sem `inlineStr`, recusa LibreOffice) | Leitor próprio (ZIP + XML), aceita ambos |
 
 ## SAP HANA Cloud (pendente)
 
