@@ -101,6 +101,25 @@ describe('Pedidos de Compras', () => {
       assert.match(erro.message, /sem estoque disponível/)
     })
 
+    it('a linha criada já com o item (criação inline) tem preço, SKU e total', async () => {
+      const item = await itemComEstoque()
+      const { data: pedido } = await api.post(`${P}/Pedidos`, {})
+      const { data: linha } = await api.post(`${P}/Pedidos${api.chave(pedido.ID, false)}/itens`, { item_ID: item.ID, qtdeItemPedido: 2 })
+      const total = Math.round(2 * item.precoUnitario * 100) / 100
+      assert.equal(linha.skuItem, item.sku)
+      assert.equal(Number(linha.precoUnitarioSnapshot), Number(item.precoUnitario))
+      assert.equal(Number(linha.valorTotal), total)
+      const { data } = await api.get(`${P}/Pedidos${api.chave(pedido.ID, false)}?$select=valorTotal`)
+      assert.equal(Number(data.valorTotal), total)
+    })
+
+    it('item sem estoque também é barrado na criação inline da linha', async () => {
+      const { data } = await api.get(`${P}/ItensAtivos?$filter=qtdeDisponivel eq 0&$top=1`)
+      const { data: pedido } = await api.post(`${P}/Pedidos`, {})
+      const erro = await falha(api.post(`${P}/Pedidos${api.chave(pedido.ID, false)}/itens`, { item_ID: data.value[0].ID }))
+      assert.match(erro.message, /sem estoque disponível/)
+    })
+
     it('o usuário comum também registra pedidos', async () => {
       const item = await itemComEstoque()
       const ID = await rascunho((await clienteAtivo(1)).ID, [{ item: item.ID, qtde: 1 }], COMUM)
