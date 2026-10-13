@@ -9,6 +9,11 @@ import type { Request } from '@sap/cds'
 /** Papel que pode alterar os cadastros (os demais só consultam). */
 export const PAPEL_ALTERACAO = 'Admin'
 
+/**
+ * Conteúdo do singleton Permissoes para o usuário da requisição.
+ * @param req leitura do singleton
+ * @returns somenteLeitura true quando o usuário não tem o papel PAPEL_ALTERACAO
+ */
 export function permissoesDoUsuario(req: Request): { somenteLeitura: boolean } {
   return { somenteLeitura: !req.user.is(PAPEL_ALTERACAO) }
 }

@@ -160,8 +160,16 @@ export default class PedidosService extends cds.ApplicationService {
       }
       return lerPedidoParaAcao(req, chave(req)!)
     }
+
+    /** Relê o pedido pela projeção do serviço (resposta das actions). */
     const resultado = (ID: string) => this.run(SELECT.one.from(Pedidos).where({ ID }))
 
+    /**
+     * Action efetuarPagamento: pedido ABERTO, dados do cartão só em memória.
+     * Aprovado, o pedido vai para AGUARDANDO_APROVACAO; recusado, segue ABERTO
+     * para nova tentativa.
+     * @param req parâmetros do cartão
+     */
     const pagar = async (req: Request<ParametrosPagamento>) => {
       const pedido = await pedidoAtivo(req)
       if (!pedido?.ID) return
@@ -183,6 +191,10 @@ export default class PedidosService extends cds.ApplicationService {
       return resultado(pedido.ID)
     }
 
+    /**
+     * Action aprovarPedido: pedido AGUARDANDO_APROVACAO com pagamento aprovado.
+     * Baixa o estoque reservado, gera os snapshots e finaliza o pedido.
+     */
     const aprovar = async (req: Request) => {
       const pedido = await pedidoAtivo(req)
       if (!pedido?.ID) return
@@ -201,6 +213,11 @@ export default class PedidosService extends cds.ApplicationService {
       return resultado(pedido.ID)
     }
 
+    /**
+     * Action cancelarPedido: cancela o pedido ou, com pagamento aprovado, abre a
+     * solicitação de reembolso (ver cancelarPedido em srv/lib/pedidos).
+     * @param req motivo do cancelamento
+     */
     const cancelar = async (req: Request<ParametrosCancelamento>) => {
       const pedido = await pedidoAtivo(req)
       if (!pedido?.ID) return

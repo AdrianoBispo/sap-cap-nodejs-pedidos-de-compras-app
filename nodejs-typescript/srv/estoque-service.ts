@@ -91,7 +91,7 @@ export default class EstoqueService extends cds.ApplicationService {
       if ((item?.qtdeReservada ?? 0) > 0 || (await emPedido(ID, false))) erro(req, 409, 'ITEM_EXCLUSAO_BLOQUEADA')
     })
 
-    // Singleton lido pela UI para esconder o que o usuário não pode alterar
+    // Singleton lido pela UI para esconder o que o usuário não pode alterar (srv/lib/permissoes)
     this.on('READ', Permissoes, req => permissoesDoUsuario(req))
 
     this.on(importarPlanilha, req => importarItens(req, this))

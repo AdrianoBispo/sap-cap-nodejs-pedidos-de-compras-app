@@ -122,7 +122,7 @@ export default class ClientesService extends cds.ApplicationService {
     this.on('definirEnderecoPrincipal', Enderecos, definirPrincipal)
     this.on('definirEnderecoPrincipal', Enderecos.drafts, definirPrincipal)
 
-    // Singleton lido pela UI para esconder o que o usuário não pode alterar
+    // Singleton lido pela UI para esconder o que o usuário não pode alterar (srv/lib/permissoes)
     this.on('READ', Permissoes, req => permissoesDoUsuario(req))
 
     this.on(importarPlanilha, req => importarClientes(req, this))
