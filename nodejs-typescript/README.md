@@ -35,7 +35,7 @@ modelo CDS pelo **cds-typer**.
 | Serviços | OData V4 com rascunho (draft), `@restrict`, `@assert`/`@mandatory`, `$apply` |
 | Front-end | SAPUI5 1.148 (LTS): Fiori Elements V4 (List Report/Object Page) e apps freestyle, `cds-plugin-ui5` |
 | Integração | ViaCEP (`fetch` nativo, URL em `cds.requires.viacep`) |
-| Qualidade | `node:test` + `@cap-js/cds-test` (73 testes), ESLint 10 + `typescript-eslint`, `tsc --noEmit` |
+| Qualidade | `node:test` + `@cap-js/cds-test` (74 testes), ESLint 10 + `typescript-eslint`, `tsc --noEmit` |
 
 ## Como executar
 
@@ -62,7 +62,7 @@ O banco é recriado a cada inicialização com os dados de demonstração de `db
 | `npm run watch` | `cds-tsx watch`: servidor com recarga automática executando os `.ts` via `tsx` |
 | `npm run typer` | Gera os tipos do modelo CDS em `@cds-models` (`cds-typer "*"`) |
 | `npm run typecheck` | `typer` + `tsc --noEmit` (verificação de tipos em `srv/`, `test/` e `scripts/`) |
-| `npm test` | `typer` + 73 testes (`node --test` com `tsx`, `CDS_TYPESCRIPT=tsx`), com ViaCEP falso local |
+| `npm test` | `typer` + 74 testes (`node --test` com `tsx`, `CDS_TYPESCRIPT=tsx`), com ViaCEP falso local |
 | `npm run lint` | ESLint (recomendado do CAP + `typescript-eslint`) e `typecheck` |
 | `npm run build` | `cds build --production`: modelo compilado e `tsc` (`tsconfig.cdsbuild.json`) em `gen/srv` |
 | `npm run serve` | `cds-tsx serve`: servidor sem recarga, executando os `.ts` via `tsx` |
@@ -108,7 +108,7 @@ export default class PedidosService extends cds.ApplicationService {
 ## Testes e lint
 
 ```sh
-npm test             # 73 testes (unidade + serviços), com ViaCEP falso local
+npm test             # 74 testes (unidade + serviços), com ViaCEP falso local
 npm run lint         # ESLint + verificação de tipos
 ```
 
@@ -117,7 +117,7 @@ npm run lint         # ESLint + verificação de tipos
 | `test/unidade.test.ts` | CPF, e-mail, telefone, imagens, status de estoque, SKU, pagamento simulado, leitor XLSX/CSV (inclusive o limite do conteúdo descompactado) |
 | `test/clientes.test.ts` | rascunho, ViaCEP, CEP geral, CEP único, endereço principal, CPF, autorização (inclusive `Permissoes`), exclusão, foto |
 | `test/estoque.test.ts` | SKU, disponibilidade e status, concorrência com edição, inativação, exclusão e `Permissoes` |
-| `test/pedidos.test.ts` | registro com reserva, edição pela diferença, pagamento, aprovação, cancelamento (inclusive ações recusadas no rascunho), reembolso, campos somente leitura |
+| `test/pedidos.test.ts` | registro com reserva, edição pela diferença, pagamento, aprovação, cancelamento (inclusive ações recusadas no rascunho e ações com o pedido alterado por outra operação), reembolso, campos somente leitura |
 | `test/reembolsos.test.ts` | aprovar, rejeitar (motivo obrigatório), decisão única |
 | `test/importacao.test.ts` | importação de clientes, estoque e pedidos (tudo ou nada), nomes e pedidos já importados recusados e dos modelos em `docs/` |
 | `test/analitico.test.ts` | agregações `$apply` dos quatro domínios |

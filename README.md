@@ -19,7 +19,7 @@
   <img src="https://img.shields.io/badge/SQLite-dev-003B57?style=for-the-badge&logo=sqlite&logoColor=white" alt="SQLite">
   <img src="https://img.shields.io/badge/API-ViaCEP-2E7D32?style=for-the-badge" alt="API ViaCEP">
   <br>
-  <img src="https://img.shields.io/badge/testes-71%20JS%20%7C%2073%20TS-9C3493?style=for-the-badge" alt="71 testes em JavaScript e 73 em TypeScript">
+  <img src="https://img.shields.io/badge/testes-72%20JS%20%7C%2074%20TS-9C3493?style=for-the-badge" alt="72 testes em JavaScript e 74 em TypeScript">
   <img src="https://img.shields.io/badge/ESLint-10-4B32C3?style=for-the-badge&logo=eslint&logoColor=white" alt="ESLint 10">
   <img src="https://img.shields.io/github/last-commit/AdrianoBispo/sap-cap-nodejs-pedidos-de-compras-app?style=for-the-badge" alt="Último commit">
   <img src="https://img.shields.io/github/repo-size/AdrianoBispo/sap-cap-nodejs-pedidos-de-compras-app?style=for-the-badge" alt="Tamanho do repositório">
@@ -158,7 +158,10 @@ regras de domínio, dos testes e dos scripts.
 - **Autorização** por papel: `Admin` e `Comum` (`@requires` / `@restrict`). Para o usuário só de
   consulta, as apps de Clientes e Estoque escondem Criar, Editar, Excluir, Importar e *Definir como
   principal* (singleton `Permissoes`).
-- **Concorrência** de estoque com `UPDATE` condicional atômico na transação da requisição.
+- **Concorrência**: movimentos de estoque e mudanças de status do pedido e do reembolso são `UPDATE`
+  condicionais atômicos na transação da requisição. De duas ações simultâneas sobre o mesmo pedido
+  (ex.: dois cancelamentos, ou pagar e cancelar) só a primeira vale; a outra é recusada
+  (`PEDIDO_ALTERADO_CONCORRENTE`) sem mexer no estoque, no pagamento ou nos snapshots.
 
 ---
 
@@ -173,7 +176,7 @@ regras de domínio, dos testes e dos scripts.
 | Front-end | SAPUI5 1.148 (LTS): Fiori Elements V4 (List Report + Object Page) e apps freestyle, servidos pelo `cds-plugin-ui5` |
 | Integração | ViaCEP via `fetch` nativo (URL em `cds.requires.viacep`) |
 | Ferramentas | `@sap/cds-dk` 10, SAP Fiori tools (geração das apps), UI5 linter, ESLint 10, `local-ssl-proxy` (HTTPS local) |
-| Testes | `node:test` + `@cap-js/cds-test` (71 testes em JavaScript, 73 em TypeScript), ViaCEP falso local |
+| Testes | `node:test` + `@cap-js/cds-test` (72 testes em JavaScript, 74 em TypeScript), ViaCEP falso local |
 
 ---
 
@@ -352,7 +355,7 @@ Autenticação *mocked* do CAP:
 | Script | JavaScript | TypeScript |
 | --- | --- | --- |
 | `npm run watch` | `cds watch` | `cds-tsx watch` (executa os `.ts` com `tsx`) |
-| `npm test` | 71 testes (`node --test`) | `typer` + 73 testes (`node --import tsx --test`) |
+| `npm test` | 72 testes (`node --test`) | `typer` + 74 testes (`node --import tsx --test`) |
 | `npm run lint` | ESLint | ESLint + `typecheck` |
 | `npm run typecheck` | — | `cds-typer` + `tsc --noEmit` |
 | `npm run build` | — | `cds build --production` (JavaScript em `gen/srv`) |
@@ -445,14 +448,14 @@ npm test         # em nodejs-padrao ou nodejs-typescript
 
 Os testes sobem o servidor com `cds.test`, usam um **ViaCEP falso local** (sem rede externa) e um
 gerador mínimo de `.xlsx`. **São permanentes**: devem ser mantidos e ajustados junto com as regras
-de negócio. São 71 testes em JavaScript e 73 em TypeScript, todos passando:
+de negócio. São 72 testes em JavaScript e 74 em TypeScript, todos passando:
 
 | Arquivo | Cobre |
 | --- | --- |
 | `unidade.test` | CPF, e-mail, telefone, imagens, status de estoque, SKU, pagamento simulado, leitor XLSX/CSV (inclusive o limite do conteúdo descompactado) |
 | `clientes.test` | Rascunho, ViaCEP, CEP geral, CEP único, endereço principal, CPF, autorização (inclusive `Permissoes`), exclusão, foto |
 | `estoque.test` | SKU, disponibilidade e status, concorrência com edição, inativação, exclusão e `Permissoes` |
-| `pedidos.test` | Registro com reserva, edição pela diferença, pagamento, aprovação, cancelamento (inclusive ações recusadas no rascunho), reembolso, campos somente leitura |
+| `pedidos.test` | Registro com reserva, edição pela diferença, pagamento, aprovação, cancelamento (inclusive ações recusadas no rascunho e ações com o pedido alterado por outra operação), reembolso, campos somente leitura |
 | `reembolsos.test` | Aprovar, rejeitar (motivo obrigatório), decisão única |
 | `importacao.test` | Clientes, estoque e pedidos (tudo ou nada), nomes e pedidos já importados recusados e os modelos de `docs/modelos-importacao` |
 | `analitico.test` | Agregações `$apply` dos quatro domínios |
@@ -636,6 +639,7 @@ o botão *Abrir gestão* navega para a app de gestão do domínio.
 
 | Versão | Mudanças |
 | --- | --- |
+| v1.7 | Concorrência nas ações do pedido: pagar, aprovar e cancelar o pedido e decidir o reembolso começam por um `UPDATE` condicional ao status lido (`transicionarPedido` em `srv/lib/pedidos`), que também bloqueia o pedido até o fim da transação; a ação que perde a corrida é recusada com `PEDIDO_ALTERADO_CONCORRENTE` (ou `REEMBOLSO_STATUS_INVALIDO`) sem liberar a reserva de novo, baixar estoque ou gravar pagamento (antes, um segundo cancelamento simultâneo liberava a reserva de outros pedidos); o Save da edição do pedido também confere o status; pagar e aprovar passam para `srv/lib/pedidos` (`efetuarPagamento` e `finalizarPedido`); depuração no VS Code (`.vscode/launch.json` e `tasks.json`) nas duas implementações: servidor, todos os testes, teste do arquivo aberto e anexar a processo, com os executáveis locais (no TypeScript, `cds-tsx`/`tsx` com breakpoints nos `.ts`); 72 testes em JavaScript e 74 em TypeScript; especificação técnica 2.4 |
 | v1.6 | Revisão do código: comentários explicam só a aplicação CAP e todas as funções foram documentadas (JSDoc/TSDoc); READMEs e especificação técnica 2.3 (.md e .docx) sem as comparações com o projeto RAP, mantido só o link para o repositório dele; singleton `Permissoes` esconde Criar, Editar, Excluir, Importar e *Definir como principal* do usuário só de consulta em Clientes e Estoque; ações do pedido chamadas no rascunho devolvem 409 (`ACAO_SOMENTE_ATIVO`) em vez de 501; importação de estoque recusa nome já cadastrado sem diferenciar maiúsculas; leitor de `.xlsx` limita o conteúdo descompactado a 50 MB; `package-lock.json` da versão TypeScript atualizado (`@sap/cds-dk` 10.1.2); 71 testes em JavaScript e 73 em TypeScript |
 | v1.5 | Análises divididas em quatro apps (Análise de Pedidos de Compras, de Clientes, de Itens do Estoque e de Pedidos de Reembolsos), com tiles próprios no launchpad e testes QUnit corrigidos; máscara de digitação no diálogo *Efetuar Pagamento*; navegações das Object Pages completadas (pedido → reembolso, histórico do cliente e dos itens → apps de origem, Object Page do item no encerramento); especificação técnica 2.2 |
 | v1.4 | Importação de pedidos sem duplicidade: a coluna Pedido vira a *Referência de importação* do pedido, e a mesma referência para o mesmo cliente é recusada enquanto houver pedido não cancelado com ela; 68 testes por versão; especificação técnica 2.1 |

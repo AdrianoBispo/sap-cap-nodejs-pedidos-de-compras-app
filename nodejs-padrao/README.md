@@ -32,7 +32,7 @@ quatro freestyle de análise) servidas pelo próprio CAP.
 | Serviços | OData V4 com rascunho (draft), `@restrict`, `@assert`/`@mandatory`, `$apply` |
 | Front-end | SAPUI5 1.148 (LTS): Fiori Elements V4 (List Report/Object Page) e apps freestyle, `cds-plugin-ui5` |
 | Integração | ViaCEP (`fetch` nativo, URL em `cds.requires.viacep`) |
-| Qualidade | `node:test` + `@cap-js/cds-test` (71 testes), ESLint 10, UI5 linter |
+| Qualidade | `node:test` + `@cap-js/cds-test` (72 testes), ESLint 10, UI5 linter |
 
 ## Como executar
 
@@ -55,7 +55,7 @@ O banco é recriado a cada inicialização com os dados de demonstração de `db
 ## Testes e lint
 
 ```sh
-npm test             # 71 testes (unidade + serviços), com ViaCEP falso local
+npm test             # 72 testes (unidade + serviços), com ViaCEP falso local
 npm run lint         # ESLint (configuração recomendada do CAP)
 ```
 
@@ -66,7 +66,7 @@ Os testes são permanentes: devem ser mantidos e ajustados junto com as regras d
 | `test/unidade.test.js` | CPF, e-mail, telefone, imagens, status de estoque, SKU, pagamento simulado, leitor XLSX/CSV (inclusive o limite do conteúdo descompactado) |
 | `test/clientes.test.js` | rascunho, ViaCEP, CEP geral, CEP único, endereço principal, CPF, autorização (inclusive `Permissoes`), exclusão, foto |
 | `test/estoque.test.js` | SKU, disponibilidade e status, concorrência com edição, inativação, exclusão e `Permissoes` |
-| `test/pedidos.test.js` | registro com reserva, edição pela diferença, pagamento, aprovação, cancelamento (inclusive ações recusadas no rascunho), reembolso, campos somente leitura |
+| `test/pedidos.test.js` | registro com reserva, edição pela diferença, pagamento, aprovação, cancelamento (inclusive ações recusadas no rascunho e ações com o pedido alterado por outra operação), reembolso, campos somente leitura |
 | `test/reembolsos.test.js` | aprovar, rejeitar (motivo obrigatório), decisão única |
 | `test/importacao.test.js` | importação de clientes, estoque e pedidos (tudo ou nada), nomes e pedidos já importados recusados e dos modelos em `docs/` |
 | `test/analitico.test.js` | agregações `$apply` dos quatro domínios |
@@ -128,6 +128,9 @@ nodejs-padrao/
 - **Permissões na UI**: o singleton `Permissoes` (`somenteLeitura`) faz as apps de Clientes e
   Estoque esconderem Criar, Editar, Excluir, Importar e *Definir como principal* do usuário sem o
   papel `Admin`; o `@restrict` continua barrando a alteração no backend.
+- **Concorrência nas ações do pedido**: pagar, aprovar, cancelar e decidir o reembolso começam por
+  um `UPDATE` condicional ao status lido; de duas ações simultâneas só a primeira vale e a outra é
+  recusada (`PEDIDO_ALTERADO_CONCORRENTE`) sem efeito.
 - **Concorrência**: cada movimento de estoque é um `UPDATE` condicional atômico ("só reserva se o
   saldo atual cobre a quantidade"); qualquer erro desfaz a transação inteira.
 - **Importação por planilha** (`.xlsx`/`.csv`) em Clientes, Estoque e Pedidos, tudo ou nada; item

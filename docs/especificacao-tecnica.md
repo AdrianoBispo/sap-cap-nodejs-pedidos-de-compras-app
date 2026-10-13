@@ -1,13 +1,14 @@
 # Especificação Técnica — Sistema de Pedidos de Compras (SAP CAP + SAP Fiori)
 
-> **Versão 2.3 — outubro de 2026.** Esta revisão descreve o sistema **como implementado** nas duas
+> **Versão 2.4 — outubro de 2026.** Esta revisão descreve o sistema **como implementado** nas duas
 > versões do repositório: [`nodejs-padrao`](../nodejs-padrao) (JavaScript) e
 > [`nodejs-typescript`](../nodejs-typescript) (TypeScript). As duas compartilham o mesmo modelo CDS,
 > os mesmos serviços, as mesmas aplicações SAPUI5 e a mesma suíte de testes; diferem apenas na
 > linguagem dos handlers (seção 19). A seção 22 resume o que mudou em relação à versão 1 e nas
 > revisões 2.1 (campos somente leitura no pedido, navegação entre apps e importação de pedidos sem
-> duplicidade), 2.2 (análises em quatro apps, máscara no pagamento e navegações das Object Pages) e
-> 2.3 (permissões na UI, ações recusadas no rascunho e proteções na importação).
+> duplicidade), 2.2 (análises em quatro apps, máscara no pagamento e navegações das Object Pages),
+> 2.3 (permissões na UI, ações recusadas no rascunho e proteções na importação) e 2.4 (transições de
+> status atômicas nas ações do pedido e depuração no VS Code).
 
 ---
 
@@ -46,7 +47,7 @@ A versão da aplicação em SAP RAP / ABAP Cloud está em
 | Integração | ViaCEP via `fetch` nativo (URL em `cds.requires.viacep`) | Implementado |
 | Segurança | Autenticação *mocked* com papéis `Admin`/`Comum`; XSUAA na implantação | Mocked implementado; XSUAA pendente |
 | Deploy | Cloud Foundry / MTA (`mta.yaml`) | Pendente |
-| Qualidade | `node:test` + `@cap-js/cds-test` (71 testes em JavaScript, 73 em TypeScript), ESLint 10 | Implementado |
+| Qualidade | `node:test` + `@cap-js/cds-test` (72 testes em JavaScript, 74 em TypeScript), ESLint 10 | Implementado |
 
 ---
 
@@ -426,7 +427,7 @@ handlers dentro da transação da requisição.
 | `enderecos` | Preenchimento pelo CEP e validações do Save |
 | `numeracao` | Sequenciais de pedido e SKU |
 | `estoque` | Reserva, liberação e baixa com `UPDATE` condicional |
-| `pedidos` | Registro, edição, snapshots, cancelamento, reembolso, pagamento |
+| `pedidos` | Registro, edição, pagamento, aprovação, cancelamento, reembolso, snapshots e transições atômicas de status |
 | `pagamento-simulado` | Simulação do cartão |
 | `planilha` | Leitor de `.xlsx` (ZIP + XML, sem bibliotecas; até 50 MB por parte descompactada) e `.csv` |
 | `importacao*` | Importações de clientes, estoque e pedidos |
@@ -619,8 +620,19 @@ WHERE ID = ? AND <condição>`). A condição usa o saldo **atual** do banco, nu
 outra transação consumiu o saldo, nenhuma linha é alterada e o pedido recebe
 `ITEM_ESTOQUE_INSUFICIENTE`, `ITEM_INATIVO`, `ITEM_RESERVA_INCONSISTENTE` ou
 `ITEM_ESTOQUE_CONCORRENTE`. Como toda a requisição roda numa transação, qualquer erro desfaz também
-os movimentos já aplicados, o número do pedido e os snapshots — não há dupla reserva, dupla baixa
-ou dupla liberação.
+os movimentos já aplicados, o número do pedido e os snapshots.
+
+**Transições de status do pedido:** duas ações podem ler o mesmo pedido ao mesmo tempo (ex.: dois
+cancelamentos, ou pagar e cancelar). Por isso toda ação começa por `transicionarPedido`
+(`srv/lib/pedidos`), um `UPDATE Pedidos SET ... WHERE ID = ? AND statusPedido_code = ? AND
+statusPagamento_code = ?` com o estado lido no início da ação. O `UPDATE` também bloqueia a linha até
+o fim da transação. Só a primeira ação muda o status; a outra recebe `PEDIDO_ALTERADO_CONCORRENTE`
+(HTTP 409) antes de mexer no estoque, no pagamento ou nos snapshots, então não há dupla reserva,
+dupla baixa ou dupla liberação. A mesma conferência vale para:
+
+- o **Save da edição** do pedido, que só ajusta a reserva se o pedido continua `ABERTO`;
+- a **decisão do reembolso**, gravada só se a solicitação ainda está `PENDENTE` (de duas decisões
+  simultâneas, a segunda recebe `REEMBOLSO_STATUS_INVALIDO`).
 
 | Status do estoque | Regra |
 |---|---|
@@ -857,6 +869,7 @@ Arquivo `_i18n/messages.properties`. Parâmetros nomeados entre chaves.
 | `PEDIDO_EXCLUSAO_BLOQUEADA` | Pedido registrado não pode ser excluído. Utilize Cancelar pedido. |
 | `PEDIDO_CLIENTE_IMUTAVEL` | O cliente de um pedido registrado não pode ser alterado. |
 | `PEDIDO_EM_EDICAO` | Pedido {numero} está em edição. Salve ou descarte o rascunho antes de executar esta ação. |
+| `PEDIDO_ALTERADO_CONCORRENTE` | O pedido {numero} foi alterado por outra operação. Atualize a tela e tente novamente. |
 | `ACAO_SOMENTE_ATIVO` | Esta ação só pode ser executada sobre o pedido salvo (fora do modo de edição). |
 | `PEDIDO_STATUS_INVALIDO` | Transição de status não permitida (status atual: {status}). |
 | `PEDIDO_PAGAMENTO_PENDENTE` | Pagamento pendente. O pedido não pode ser finalizado. |
@@ -932,6 +945,7 @@ Cada critério tem teste automatizado correspondente (seção 20).
 - Dado um pedido sem pagamento aprovado, quando cancelado com motivo, então a reserva é liberada, os snapshots gerados e o pedido `CANCELADO`; sem motivo, é bloqueado.
 - Dado um pedido pago, quando cancelado, então vai para `PROCESSANDO_REEMBOLSO`, mantém a reserva e cria o reembolso `PENDENTE`.
 - Dado um pedido em edição ou um rascunho, quando uma ação for executada, então é bloqueada (HTTP 409, `ACAO_SOMENTE_ATIVO` no rascunho).
+- Dado duas ações simultâneas sobre o mesmo pedido (ex.: dois cancelamentos, ou pagar e cancelar), então só a primeira é aplicada; a outra é recusada com `PEDIDO_ALTERADO_CONCORRENTE` sem alterar estoque, reserva, pagamento ou motivo.
 
 ### 17.5 Reembolsos
 
@@ -998,12 +1012,17 @@ teste correspondente nas duas suítes.
 | Gerar tipos | — | `npm run typer` |
 | Build de produção | `cds build --production` | `npm run build` |
 | Regenerar dados | `npm run dados:demo` | `npm run dados:demo` |
+| Depurar (VS Code) | `.vscode/launch.json`: servidor (`cds watch` ou `cds serve`), todos os testes, teste do arquivo aberto, anexar a processo | Idem com `cds-tsx` e `tsx` (breakpoints direto nos `.ts`, com source maps) |
+
+Para depurar, abra a pasta da implementação (`nodejs-padrao` ou `nodejs-typescript`) como workspace
+no VS Code e rode `npm install`. As configurações usam os executáveis locais de `node_modules/.bin`
+e anexam automaticamente os processos filhos do `watch` e do `node --test`.
 
 ---
 
 ## 20. Testes Automatizados
 
-71 testes na versão JavaScript e 73 na TypeScript (`node:test` + `@cap-js/cds-test`), com um
+72 testes na versão JavaScript e 74 na TypeScript (`node:test` + `@cap-js/cds-test`), com um
 servidor ViaCEP falso local (sem rede externa) e um gerador de `.xlsx` mínimo. São permanentes:
 devem ser mantidos e ajustados junto com as regras de negócio.
 
@@ -1012,7 +1031,7 @@ devem ser mantidos e ajustados junto com as regras de negócio.
 | `unidade.test` | CPF, e-mail, telefone, imagens, status de estoque, SKU, pagamento simulado, leitor XLSX/CSV (inclusive o limite do conteúdo descompactado) |
 | `clientes.test` | Rascunho, ViaCEP, CEP geral, CEP único, endereço principal, CPF, autorização (inclusive `Permissoes`), exclusão, foto |
 | `estoque.test` | SKU, disponibilidade e status, concorrência com edição, inativação, exclusão e `Permissoes` |
-| `pedidos.test` | Registro com reserva, edição pela diferença, pagamento, aprovação, cancelamento (inclusive ações recusadas no rascunho), reembolso, campos somente leitura (cliente e pagamento) |
+| `pedidos.test` | Registro com reserva, edição pela diferença, pagamento, aprovação, cancelamento (inclusive ações recusadas no rascunho e ações com o pedido alterado por outra operação), reembolso, campos somente leitura (cliente e pagamento) |
 | `reembolsos.test` | Aprovar, rejeitar (motivo obrigatório), decisão única |
 | `importacao.test` | Clientes, estoque e pedidos (tudo ou nada), nomes e pedidos já importados recusados e modelos de `docs/` |
 | `analitico.test` | Agregações `$apply` dos quatro domínios |
@@ -1125,6 +1144,16 @@ Estrutura de cada implementação (as diferenças estão marcadas):
 | Leitor de `.xlsx` | Sem limite para o conteúdo descompactado | Até 50 MB por parte descompactada (seção 13.1) |
 | Código-fonte | Funções com documentação parcial | Comentários explicam a aplicação CAP; todas as funções documentadas (JSDoc/TSDoc) |
 | Testes | 68 por versão | 71 (JavaScript) e 73 (TypeScript) |
+
+### 22.5 Revisão 2.4
+
+| Tema | Versão 2.3 | Versão 2.4 |
+|---|---|---|
+| Ações simultâneas no pedido | A ação mudava o status no fim, sem conferir o status lido; um segundo cancelamento simultâneo liberava a reserva de novo (consumindo reservas de outros pedidos) | Transição de status atômica no início de cada ação; a ação que perde a corrida recebe `PEDIDO_ALTERADO_CONCORRENTE` sem efeito (seção 10) |
+| Decisão do reembolso | Gravada depois do lado do pedido, sem conferir a solicitação | Gravada primeiro, só com a solicitação `PENDENTE` (seção 10) |
+| Pagar e aprovar | Regras no handler do serviço | Em `srv/lib/pedidos` (`efetuarPagamento`, `finalizarPedido`), como o cancelamento (seção 7.2) |
+| Depuração | `launch.json` dependia do `cds` global e, no TypeScript, não carregava os `.ts` | Configurações de servidor e testes nas duas implementações (seção 19.1) |
+| Testes | 71 (JavaScript) e 73 (TypeScript) | 72 (JavaScript) e 74 (TypeScript) |
 
 ---
 
