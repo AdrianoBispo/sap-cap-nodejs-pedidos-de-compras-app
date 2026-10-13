@@ -2,9 +2,9 @@ using {pedidoscompras as db} from '../db/schema';
 using {pedidoscompras.ResultadoImportacao} from './common';
 
 /**
- * Aplicação Gestão de Estoque (equivalente ao serviço ZUI_PC_ESTOQUE).
+ * Aplicação Gestão de Estoque.
  * Reserva, liberação e baixa NÃO são expostas: só o domínio de pedidos
- * movimenta o estoque (srv/lib/estoque.js).
+ * movimenta o estoque (srv/lib/estoque).
  */
 @path    : 'estoque'
 @requires: 'authenticated-user'

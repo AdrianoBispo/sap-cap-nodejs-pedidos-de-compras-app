@@ -1,5 +1,5 @@
 /*
- * UI da aplicação Gestão de Reembolsos (porte de ZC_PC_REEMBOLSO_APP.ddlx).
+ * UI da aplicação Gestão de Reembolsos.
  * Lista somente leitura com as ações Aprovar e Rejeitar.
  */
 using ReembolsosService as service from '../../srv/reembolsos-service';

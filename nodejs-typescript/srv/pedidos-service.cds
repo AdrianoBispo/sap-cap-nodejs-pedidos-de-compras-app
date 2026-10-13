@@ -2,7 +2,7 @@ using {pedidoscompras as db} from '../db/schema';
 using {pedidoscompras.ResultadoImportacao} from './common';
 
 /**
- * Aplicação Pedidos de Compras (equivalente ao serviço ZUI_PC_PEDIDOS_COMPRAS).
+ * Aplicação Pedidos de Compras.
  *
  * Ciclo de vida: rascunho -> Salvar registra o pedido (ABERTO) e reserva o
  * estoque -> Efetuar Pagamento -> Aprovar pedido (FINALIZADO) ou Cancelar.

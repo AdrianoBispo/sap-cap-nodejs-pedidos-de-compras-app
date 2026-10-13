@@ -2,7 +2,7 @@ using {pedidoscompras as db} from '../db/schema';
 using {pedidoscompras.ResultadoImportacao} from './common';
 
 /**
- * Aplicação Gestão de Clientes (equivalente ao serviço ZUI_PC_CLIENTES).
+ * Aplicação Gestão de Clientes.
  * Clientes e endereços com rascunho; apenas administradores alteram.
  */
 @path    : 'clientes'
@@ -50,8 +50,8 @@ service ClientesService {
   entity Generos         as projection on db.Generos;
 
   /**
-   * CEPs já validados no cadastro (um registro por CEP, sem CEP geral), como
-   * a value help ZC_PC_CEP_VH: escolher um deles evita nova chamada ao ViaCEP.
+   * CEPs já validados no cadastro (um registro por CEP, sem CEP geral), usados
+   * como value help do CEP: escolher um deles evita nova chamada ao ViaCEP.
    */
   @readonly
   entity CepsCadastrados as

@@ -1,5 +1,5 @@
 /*
- * UI da aplicação Gestão de Estoque (porte de ZC_PC_ITEM_APP.ddlx).
+ * UI da aplicação Gestão de Estoque: List Report e Object Page dos itens.
  */
 using EstoqueService as service from '../../srv/estoque-service';
 

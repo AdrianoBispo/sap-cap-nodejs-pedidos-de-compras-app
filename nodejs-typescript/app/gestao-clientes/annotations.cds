@@ -1,6 +1,6 @@
 /*
- * UI da aplicação Gestão de Clientes (porte de ZC_PC_CLIENTE_APP.ddlx e
- * ZC_PC_ENDERECO_APP.ddlx).
+ * UI da aplicação Gestão de Clientes: List Report e Object Page do cliente,
+ * com a tabela e a Object Page dos endereços.
  */
 using ClientesService as service from '../../srv/clientes-service';
 

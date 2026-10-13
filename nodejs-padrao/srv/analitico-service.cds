@@ -1,10 +1,10 @@
 using {pedidoscompras as db} from '../db/schema';
 
 /**
- * Camada analítica somente leitura (equivalente aos cubos ZI_PC_*_CUBE, às
- * consultas ZC_PC_*_ANALISE e ao serviço ZUI_PC_ANALITICO do RAP).
+ * Camada analítica somente leitura.
  *
- * Cada entidade é uma visão por domínio com dimensões e medidas. As medidas
+ * Cada entidade é uma visão por domínio (pedidos, clientes, itens de estoque
+ * e reembolsos) com dimensões e medidas. As medidas
  * têm agregação padrão (@Aggregation.default) e são expostas como "custom
  * aggregates", então o cliente usa $apply=groupby((dimensão),aggregate(medida))
  * sem informar o método. Usada pelos apps freestyle de análise (app/analise-pedidos,

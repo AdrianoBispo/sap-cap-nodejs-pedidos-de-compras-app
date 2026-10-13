@@ -1,7 +1,7 @@
 {
   "name": "pedidos-compras-cap",
   "version": "1.0.0",
-  "description": "Pedidos de Compras em SAP CAP (Node.js, JavaScript ESM) - porte do projeto RAP ZAVBS_PC",
+  "description": "Pedidos de Compras em SAP CAP (Node.js, JavaScript ESM)",
   "type": "module",
   "private": true,
   "engines": {

@@ -1,9 +1,9 @@
 /*
- * Validações declarativas de entrada (equivalente às validations simples dos
- * BOs RAP). São avaliadas pelo CAP nos PATCHs do rascunho (mensagens de
- * rascunho no Fiori) e ao salvar. Regras que dependem de algoritmo ou de
+ * Validações declarativas de entrada (@mandatory, @assert.format, @assert e
+ * @assert.target). São avaliadas pelo CAP nos PATCHs do rascunho (mensagens
+ * de rascunho no Fiori) e ao salvar. Regras que dependem de algoritmo ou de
  * outros registros (dígitos do CPF, unicidade, ViaCEP, estoque) ficam nos
- * handlers em srv/*.js.
+ * handlers dos serviços (srv/*-service).
  */
 using {pedidoscompras as db} from '../db/schema';
 

@@ -1,19 +1,20 @@
 /*
  * Modelo de domínio do sistema de Pedidos de Compras.
  *
- * Porte das tabelas ZTA_PC_* (pacote ZAVBS_PC) para CDS:
- *   ZTA_PC_CLIENTE   -> Clientes            ZTA_PC_PEDIDO    -> Pedidos
- *   ZTA_PC_ENDERECO  -> Enderecos           ZTA_PC_ITEM_PED  -> ItensPedido
- *   ZTA_PC_ITEM      -> Itens               ZTA_PC_PAGAMENTO -> Pagamentos
- *   ZTA_PC_SNAP_CLI  -> PedidosClienteSnapshots
- *   ZTA_PC_SNAP_ITM  -> PedidosItensSnapshots
- *   ZTA_PC_REEMBOLSO -> Reembolsos
+ * Entidades:
+ *   Clientes, Enderecos          cadastro de clientes e seus endereços
+ *   Itens                        itens de estoque (saldo, reserva e preço)
+ *   Pedidos, ItensPedido         pedido de compra e suas linhas
+ *   Pagamentos                   última tentativa de pagamento do pedido
+ *   PedidosClienteSnapshots,     cópia do cliente/endereço e dos itens
+ *   PedidosItensSnapshots        gravada quando o pedido é encerrado
+ *   Reembolsos                   solicitação de reembolso de pedido pago
  *
- * Diferenças em relação ao RAP:
+ * Decisões de modelagem:
  *  - Chaves cuid (UUID) e campos administrativos do aspect managed.
  *  - Tabelas de rascunho geradas pelo CAP (@odata.draft.enabled nos serviços).
- *  - QtdeDisponivel e StatusEstoque são elementos calculados "stored" (colunas
- *    geradas no banco): continuam filtráveis sem determinations.
+ *  - qtdeDisponivel e statusEstoque_code são elementos calculados "stored"
+ *    (colunas geradas no banco): sempre consistentes com o saldo e filtráveis.
  *  - Os indicadores de status do pedido e os textos formatados (CPF, telefone,
  *    CEP, endereço) são elementos calculados na leitura, sem colunas persistidas.
  */
@@ -78,7 +79,7 @@ entity Clientes : cuid, managed {
       pedidos              : Association to many Pedidos
                                on pedidos.cliente = $self;
 
-      // Calculados na leitura (equivalentes aos virtual elements de ZCL_PC_VE_CLIENTE)
+      // Calculados na leitura (não são colunas da tabela)
       cpfFormatado         : String(14) = substring(cpf, 0, 3) || '.' || substring(cpf, 3, 3) || '.'
                                           || substring(cpf, 6, 3) || '-' || substring(cpf, 9, 2);
       telefoneFormatado    : String(15) = case
@@ -206,7 +207,7 @@ entity Pedidos : cuid, managed {
   canceladoPor              : User;
 
   // Indicadores calculados na leitura: dirigem a Object Page dinâmica
-  // (no RAP eram colunas persistidas mantidas por AtualizarFlagsStatus).
+  // (seções e campos visíveis conforme o status do pedido).
   /** FINALIZADO ou CANCELADO: cliente e itens vêm dos snapshots. */
   encerrado                 : Boolean = case
                                           when statusPedido.code = 'FINALIZADO'

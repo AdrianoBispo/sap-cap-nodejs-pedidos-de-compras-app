@@ -1,7 +1,8 @@
 /*
  * Tipos reutilizáveis e CodeLists do domínio Pedidos de Compras.
- * Equivalente CAP da tabela ZTA_PC_CODELIST + views ZC_PC_*_VH do projeto RAP:
- * cada lista vira uma entidade própria baseada em sap.common.CodeList.
+ * Cada lista de valores é uma entidade própria baseada em sap.common.CodeList
+ * (code, name e descr traduzíveis), com ordem de exibição e criticidade para
+ * a UI. As entidades servem de value help e de texto dos códigos no Fiori.
  */
 namespace pedidoscompras;
 
@@ -79,7 +80,7 @@ entity MetodosPagamento : CodeListOrdenada {
       };
 }
 
-/** Situação da consulta de CEP gravada no endereço (V/I/X), como no RAP. */
+/** Situação da consulta de CEP gravada no endereço: V validado, I inválido, X indisponível. */
 type StatusCep : String(1) enum {
   Validado     = 'V';
   Invalido     = 'I';
@@ -87,8 +88,8 @@ type StatusCep : String(1) enum {
 }
 
 /**
- * Sequenciais do projeto (substitui o Number Range Object ZPC_NR do RAP).
- * PEDIDO -> NumeroPedido; SKU -> sequencial do SKU.
+ * Último número emitido por objeto: PEDIDO -> numeroPedido; SKU -> sequencial
+ * do SKU. Incrementado só por srv/lib/numeracao, dentro da transação.
  */
 entity Numeracoes {
   key objeto        : String(20);
