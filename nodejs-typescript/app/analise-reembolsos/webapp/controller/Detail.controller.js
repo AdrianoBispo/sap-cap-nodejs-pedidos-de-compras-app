@@ -1,3 +1,8 @@
+/*
+ * Detalhe de um cenário: gráfico com troca de tipo, tabela com valores
+ * formatados, participação no total e linha de total, e a mesma barra de
+ * filtros do painel.
+ */
 sap.ui.define([
     "./BaseController",
     "sap/ui/model/json/JSONModel",
@@ -6,6 +11,7 @@ sap.ui.define([
 ], function (BaseController, JSONModel, Scenarios, formatter) {
     "use strict";
 
+    /** Tipos de gráfico oferecidos e seus ícones. */
     var CHART_ICONS = {
         column: "sap-icon://vertical-bar-chart",
         bar: "sap-icon://horizontal-bar-chart",
@@ -14,12 +20,18 @@ sap.ui.define([
     };
 
     return BaseController.extend("analisereembolsos.controller.Detail", {
+        /** Cria o modelo "detail" e escuta a rota "detail". */
         onInit: function () {
             this._token = 0;
             this.setModel(new JSONModel({ rows: [], tableRows: [], measures: [], chartTypes: [] }), "detail");
             this.getRouter().getRoute("detail").attachPatternMatched(this._onMatched, this);
         },
 
+        /**
+         * Rota "detail": monta o cabeçalho, as colunas e os tipos de gráfico do
+         * cenário e carrega os dados. Cenário desconhecido volta ao painel.
+         * @param {sap.ui.base.Event} oEvent
+         */
         _onMatched: function (oEvent) {
             var oScenario = Scenarios.getScenario(oEvent.getParameter("arguments").scenario);
             if (!oScenario) {
@@ -66,10 +78,12 @@ sap.ui.define([
             this._load();
         },
 
+        /** (Re)monta a barra de filtros do domínio; cada mudança recarrega o detalhe. */
         _refreshFilters: function () {
             this.buildFilterBar(this.byId("filterBox"), this._scenario.domain, this._load.bind(this));
         },
 
+        /** Carrega as linhas do cenário com os filtros atuais (só a última carga atualiza a tela). */
         _load: function () {
             var oScenario = this._scenario;
             var oDetail = this.getModel("detail");
@@ -98,7 +112,12 @@ sap.ui.define([
             }.bind(this));
         },
 
-        /** Linhas da tabela: valores formatados, % do total (1 medida somável) e linha de total. */
+        /**
+         * Linhas da tabela: valores formatados, % do total (uma medida somável) e
+         * linha de total (medidas somáveis e mais de uma linha).
+         * @param {object[]} aRows linhas moldadas pelo AnalyticsQuery
+         * @returns {object[]}
+         */
         _toTableRows: function (aRows) {
             var aMeasures = this._scenario.measures;
             var oDetail = this.getModel("detail");
@@ -134,10 +153,15 @@ sap.ui.define([
             return aTable;
         },
 
+        /**
+         * Troca o tipo de gráfico.
+         * @param {sap.ui.base.Event} oEvent
+         */
         onChartTypeChange: function (oEvent) {
             this.getModel("detail").setProperty("/chart", oEvent.getParameter("item").getKey());
         },
 
+        /** "Atualizar": descarta o cache das opções de filtro e recarrega. */
         onRefresh: function () {
             this.getService().resetCache();
             this._refreshFilters();

@@ -1,3 +1,8 @@
+/*
+ * Base dos controllers do painel e do detalhe: atalhos para roteador, modelos,
+ * textos, serviço de consultas, barra de filtros e navegação para o app de
+ * gestão do domínio.
+ */
 sap.ui.define([
     "sap/ui/core/mvc/Controller",
     "sap/m/MessageToast",
@@ -7,31 +12,63 @@ sap.ui.define([
     "use strict";
 
     return Controller.extend("analiseclientes.controller.BaseController", {
+        /**
+         * Roteador do componente.
+         * @returns {sap.m.routing.Router}
+         */
         getRouter: function () {
             return this.getOwnerComponent().getRouter();
         },
 
+        /**
+         * Modelo da view pelo nome.
+         * @param {string} [sName] nome do modelo (sem nome: modelo OData padrão)
+         * @returns {sap.ui.model.Model}
+         */
         getModel: function (sName) {
             return this.getView().getModel(sName);
         },
 
+        /**
+         * Define um modelo na view.
+         * @param {sap.ui.model.Model} oModel
+         * @param {string} [sName]
+         */
         setModel: function (oModel, sName) {
             return this.getView().setModel(oModel, sName);
         },
 
+        /**
+         * Modelo "state" do componente (domínio, filtros, KPIs e cards).
+         * @returns {sap.ui.model.json.JSONModel}
+         */
         getState: function () {
             return this.getOwnerComponent().getModel("state");
         },
 
+        /**
+         * Serviço de consultas analíticas do componente.
+         * @returns {analiseclientes.service.AnalyticsService}
+         */
         getService: function () {
             return this.getOwnerComponent().getService();
         },
 
+        /**
+         * Texto do i18n do app.
+         * @param {string} sKey chave
+         * @param {any[]} [aArgs] parâmetros posicionais
+         * @returns {string}
+         */
         getText: function (sKey, aArgs) {
             return this.getOwnerComponent().getModel("i18n").getResourceBundle().getText(sKey, aArgs);
         },
 
-        /** Valores atuais dos filtros do domínio, por campo. */
+        /**
+         * Valores atuais dos filtros do domínio, por campo.
+         * @param {string} sDomain chave do domínio
+         * @returns {object}
+         */
         getFilterValues: function (sDomain) {
             return this.getState().getProperty("/filters/" + sDomain) || {};
         },
@@ -57,7 +94,8 @@ sap.ui.define([
 
         /**
          * Abre o app de gestão do domínio: navegação semântica quando há launchpad;
-         * fora dele, a BSP irmã (mesmo servidor ABAP) em outra aba.
+         * fora dele, o app irmão servido pelo mesmo servidor CAP, em outra aba.
+         * @param {string} sDomain chave do domínio
          */
         openManageApp: function (sDomain) {
             var oManage = Scenarios.getDomain(sDomain).manage;
@@ -72,6 +110,7 @@ sap.ui.define([
             }
         },
 
+        /** Volta para o painel. */
         onNavBack: function () {
             this.getRouter().navTo("home", {}, true);
         }

@@ -6,19 +6,36 @@
 sap.ui.define(["./Scenarios"], function (Scenarios) {
     "use strict";
 
+    /** Campo da moeda: entra no groupby quando há medida monetária. */
     var CURRENCY = "currency";
 
+    /**
+     * Campos do groupby de uma dimensão: o campo e, se houver, o campo de texto.
+     * @param {string} sDimension
+     * @returns {string[]}
+     */
     function dimensionFields(sDimension) {
         var oDimension = Scenarios.dimensions[sDimension] || {};
         return oDimension.text ? [sDimension, oDimension.text] : [sDimension];
     }
 
+    /**
+     * Indica se alguma medida é monetária (depende da moeda).
+     * @param {string[]} aMeasures
+     * @returns {boolean}
+     */
     function needsCurrency(aMeasures) {
         return aMeasures.some(function (sMeasure) {
             return (Scenarios.measures[sMeasure] || {}).currency;
         });
     }
 
+    /**
+     * Descritor $$aggregation do ODataListBinding (group + aggregate).
+     * @param {string[]} aGroupFields campos do groupby
+     * @param {string[]} aMeasures medidas (agregação padrão do backend)
+     * @returns {{group: object, aggregate: object}}
+     */
     function toAggregation(aGroupFields, aMeasures) {
         var oGroup = {};
         var oAggregate = {};
@@ -49,7 +66,12 @@ sap.ui.define(["./Scenarios"], function (Scenarios) {
         return aConditions;
     }
 
-    /** Consulta de um cenário: groupby(dimensão[, texto][, Currency]) + aggregate(medidas). */
+    /**
+     * Consulta de um cenário: groupby(dimensão[, texto][, moeda]) + aggregate(medidas).
+     * @param {object} oScenario cenário de Scenarios
+     * @param {object} mFilterValues valores dos filtros do domínio
+     * @returns {{entitySet: string, aggregation: object, filters: object[]}}
+     */
     function buildScenarioQuery(oScenario, mFilterValues) {
         var oDomain = Scenarios.getDomain(oScenario.domain);
         var aGroup = dimensionFields(oScenario.dimension);
@@ -63,7 +85,12 @@ sap.ui.define(["./Scenarios"], function (Scenarios) {
         };
     }
 
-    /** Totais do domínio (KPIs): aggregate sem dimensão; por moeda quando há medida monetária. */
+    /**
+     * Totais do domínio (KPIs): aggregate sem dimensão; por moeda quando há medida monetária.
+     * @param {object} oDomain domínio de Scenarios
+     * @param {object} mFilterValues valores dos filtros do domínio
+     * @returns {{entitySet: string, aggregation: object, filters: object[]}}
+     */
     function buildKpiQuery(oDomain, mFilterValues) {
         var aGroup = needsCurrency(oDomain.kpis) ? [CURRENCY] : [];
         return {
@@ -73,7 +100,12 @@ sap.ui.define(["./Scenarios"], function (Scenarios) {
         };
     }
 
-    /** Valores distintos de um campo de filtro (para os MultiComboBox). */
+    /**
+     * Valores distintos de um campo de filtro (opções dos MultiComboBox).
+     * @param {object} oDomain domínio de Scenarios
+     * @param {object} oFilterDef definição do filtro
+     * @returns {{entitySet: string, aggregation: object, filters: object[]}}
+     */
     function buildFilterValuesQuery(oDomain, oFilterDef) {
         return {
             entitySet: oDomain.entitySet,
@@ -82,16 +114,22 @@ sap.ui.define(["./Scenarios"], function (Scenarios) {
         };
     }
 
-    /** AAAAMM -> MM/AAAA */
+    /**
+     * Mês AAAAMM -> MM/AAAA (outros valores voltam como vieram).
+     * @param {string} sValue
+     * @returns {string}
+     */
     function formatMonth(sValue) {
         return /^\d{6}$/.test(sValue) ? sValue.substring(4) + "/" + sValue.substring(0, 4) : sValue;
     }
 
     /**
-     * Texto exibido de um valor de dimensão.
+     * Texto exibido de um valor de dimensão: campo de texto, mês formatado,
+     * faixa ou Sim/Não traduzidos, ou o próprio valor ("-" se vazio).
      * @param {string} sDimension nome da dimensão
      * @param {object} oRow linha do serviço
-     * @param {function(string):string} [fnText] resolve chaves de i18n (faixa de score)
+     * @param {function(string):string} [fnText] resolve chaves de i18n (faixa e Sim/Não)
+     * @returns {string}
      */
     function dimensionText(sDimension, oRow, fnText) {
         var oDimension = Scenarios.dimensions[sDimension] || {};
@@ -111,6 +149,10 @@ sap.ui.define(["./Scenarios"], function (Scenarios) {
         return vValue === null || vValue === undefined || vValue === "" ? "-" : String(vValue);
     }
 
+    /**
+     * Comparador crescente para Array.prototype.sort.
+     * @returns {number} -1, 0 ou 1
+     */
     function compare(vA, vB) {
         if (vA === vB) {
             return 0;
@@ -118,7 +160,16 @@ sap.ui.define(["./Scenarios"], function (Scenarios) {
         return vA < vB ? -1 : 1;
     }
 
-    /** Une linhas da mesma chave (moedas diferentes): soma, ou média para medidas "avg". */
+    /**
+     * Une as linhas da mesma chave de dimensão (vindas em moedas diferentes):
+     * soma as medidas, ou faz a média simples para medidas "avg". Os apps usam
+     * uma única moeda (BRL), então na prática cada chave tem uma linha.
+     * @param {object[]} aRows linhas do serviço
+     * @param {string} sDimension
+     * @param {string[]} aMeasures
+     * @param {function(string):string} [fnText]
+     * @returns {{key:string,label:string,currency:string,values:object,count:number}[]}
+     */
     function mergeRows(aRows, sDimension, aMeasures, fnText) {
         var mByKey = {};
         var aOrder = [];
@@ -154,6 +205,9 @@ sap.ui.define(["./Scenarios"], function (Scenarios) {
 
     /**
      * Linhas de um cenário prontas para gráfico/tabela: junta, ordena e limita (top).
+     * @param {object} oScenario cenário de Scenarios
+     * @param {object[]} aRawRows linhas do serviço
+     * @param {function(string):string} [fnText]
      * @returns {{key:string,label:string,currency:string,values:object}[]}
      */
     function shapeRows(oScenario, aRawRows, fnText) {
@@ -170,7 +224,12 @@ sap.ui.define(["./Scenarios"], function (Scenarios) {
         return oScenario.top ? aRows.slice(0, oScenario.top) : aRows;
     }
 
-    /** Totais do domínio: soma entre moedas (média para medidas "avg"). */
+    /**
+     * Totais do domínio: soma entre moedas (média para medidas "avg").
+     * @param {object} oDomain domínio de Scenarios
+     * @param {object[]} aRawRows linhas do serviço (uma por moeda)
+     * @returns {{values: object, currency: string}}
+     */
     function shapeKpis(oDomain, aRawRows) {
         var oTotals = {};
         var aRows = aRawRows || [];
@@ -182,7 +241,13 @@ sap.ui.define(["./Scenarios"], function (Scenarios) {
         return { values: oTotals, currency: (aRows[0] && aRows[0][CURRENCY]) || "" };
     }
 
-    /** Opções do filtro "list": ordenadas, com texto e chave. */
+    /**
+     * Opções de um filtro "list": chave e texto, em ordem cronológica (meses) ou alfabética.
+     * @param {object} oFilterDef definição do filtro
+     * @param {object[]} aRawRows valores distintos lidos do serviço
+     * @param {function(string):string} [fnText]
+     * @returns {{key:string,text:string}[]}
+     */
     function shapeFilterValues(oFilterDef, aRawRows, fnText) {
         var aItems = (aRawRows || []).map(function (oRow) {
             return {

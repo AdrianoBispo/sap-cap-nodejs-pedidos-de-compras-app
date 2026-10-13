@@ -27,11 +27,24 @@ sap.ui.define([
         var oState = oContext.state;
         var getText = oContext.getText;
 
+        /**
+         * Grava o valor do filtro no modelo "state" e avisa a página.
+         * @param {string} sField campo
+         * @param {any} vValue chaves (list), "true"/"false"/"" (boolean) ou texto (search)
+         */
         function setValue(sField, vValue) {
             oState.setProperty("/filters/" + oDomain.key + "/" + sField, vValue);
             oContext.onChange();
         }
 
+        /**
+         * Controle do filtro conforme o tipo: MultiComboBox (list, com as opções
+         * lidas do serviço), Select Todos/Sim/Não (boolean) ou Input (search).
+         * @param {object} oFilter definição do filtro
+         * @param {string} sLabel rótulo (usado na mensagem de erro de carga)
+         * @param {any} vCurrent valor atual
+         * @returns {sap.ui.core.Control}
+         */
         function createControl(oFilter, sLabel, vCurrent) {
             if (oFilter.type === "list") {
                 var oCombo = new MultiComboBox({

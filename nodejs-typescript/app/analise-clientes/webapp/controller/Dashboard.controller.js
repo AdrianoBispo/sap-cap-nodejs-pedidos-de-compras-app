@@ -1,3 +1,8 @@
+/*
+ * Painel do app: barra de filtros, tiles de KPI e um card com gráfico por
+ * cenário do domínio. As cargas concorrentes são descartadas por um token:
+ * só a resposta da última carga atualiza a tela.
+ */
 sap.ui.define([
     "./BaseController",
     "../model/Scenarios",
@@ -6,6 +11,7 @@ sap.ui.define([
     "use strict";
 
     return BaseController.extend("analiseclientes.controller.Dashboard", {
+        /** Prepara os cards do domínio e escuta a rota "home". */
         onInit: function () {
             this._token = 0;
             this._domain = Scenarios.domains[0].key;
@@ -16,12 +22,17 @@ sap.ui.define([
             this.getRouter().getRoute("home").attachPatternMatched(this._onMatched, this);
         },
 
+        /** Rota "home": os filtros podem ter mudado no detalhe, então remonta a barra e recarrega. */
         _onMatched: function () {
-            // os filtros podem ter mudado na página de detalhe: remonta a barra e recarrega
             this._refreshFilters();
             this._load();
         },
 
+        /**
+         * Card de um cenário (títulos, tipo de gráfico, dimensão e medidas), ainda sem linhas.
+         * @param {object} oScenario cenário de Scenarios
+         * @returns {object}
+         */
         _toCard: function (oScenario) {
             return {
                 id: oScenario.id,
@@ -38,10 +49,15 @@ sap.ui.define([
             };
         },
 
+        /** (Re)monta a barra de filtros; cada mudança recarrega o painel. */
         _refreshFilters: function () {
             this.buildFilterBar(this.byId("filterBox"), this._domain, this._load.bind(this));
         },
 
+        /**
+         * Carrega os cards e os KPIs com os filtros atuais. O primeiro erro é
+         * exibido na faixa de mensagem; respostas de cargas antigas são ignoradas.
+         */
         _load: function () {
             var oState = this.getState();
             var oDomain = Scenarios.getDomain(this._domain);
@@ -89,16 +105,22 @@ sap.ui.define([
             }).catch(fail);
         },
 
+        /** "Atualizar": descarta o cache das opções de filtro e recarrega tudo. */
         onRefresh: function () {
             this.getService().resetCache();
             this._refreshFilters();
             this._load();
         },
 
+        /** Abre o app de gestão do domínio. */
         onOpenManage: function () {
             this.openManageApp(this._domain);
         },
 
+        /**
+         * Abre o detalhe do cenário do card clicado.
+         * @param {sap.ui.base.Event} oEvent
+         */
         onCardPress: function (oEvent) {
             var sId = oEvent.getSource().getBindingContext("state").getProperty("id");
             this.getRouter().navTo("detail", { scenario: sId });

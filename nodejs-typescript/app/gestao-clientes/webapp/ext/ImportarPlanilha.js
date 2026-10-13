@@ -15,6 +15,11 @@ sap.ui.define([
 ], function (Button, Dialog, MessageBox, MessageToast, Text, VBox, FileUploader) {
     "use strict";
 
+    /**
+     * Lê o arquivo escolhido como base64 (sem o prefixo "data:...;base64,").
+     * @param {File} arquivo
+     * @returns {Promise<string>}
+     */
     function lerComoBase64(arquivo) {
         return new Promise(function (resolve, reject) {
             const leitor = new FileReader();
@@ -28,6 +33,11 @@ sap.ui.define([
         });
     }
 
+    /**
+     * Mensagem do erro da action seguida dos detalhes (um por linha da planilha).
+     * @param {Error} erro erro devolvido pelo modelo OData
+     * @returns {string}
+     */
     function textoDoErro(erro) {
         const detalhes = (erro && erro.error && erro.error.details) || [];
         const linhas = detalhes.map(function (d) {
@@ -37,6 +47,11 @@ sap.ui.define([
     }
 
     return {
+        /**
+         * Handler do botão "Importar planilha" (this = ExtensionAPI do List Report):
+         * abre o diálogo, envia o arquivo para a action importarPlanilha e
+         * atualiza a lista ao concluir.
+         */
         abrir: function () {
             const that = this; // ExtensionAPI do List Report
             const modelo = that.getModel();

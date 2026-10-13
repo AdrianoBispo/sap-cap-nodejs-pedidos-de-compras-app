@@ -23,36 +23,61 @@ sap.ui.define([
 ], function (Button, Dialog, Label, MaskInput, Select, VBox, Item, Sorter) {
     "use strict";
 
+    /** Action vinculada chamada pelo diálogo. */
     const ACAO = "PedidosService.efetuarPagamento";
+    /** Máscaras do sap.m.MaskInput: 9 = dígito. */
     const MASCARA = { cartao: "9999 9999 9999 9999", validade: "99/99", cvv: "999" };
+    /** Caractere das posições ainda não digitadas. */
     const MARCADOR = "_";
 
     /**
      * Valor digitado no campo. Durante a digitação (liveChange) a propriedade
      * value ainda não foi atualizada: vale o último valor recebido no evento.
+     * @param {sap.m.MaskInput} campo
+     * @returns {string}
      */
     function valor(campo) {
         const digitado = campo.data("digitado");
         return digitado === null || digitado === undefined ? campo.getValue() : digitado;
     }
 
-    /** Campo mascarado preenchido em todas as posições. */
+    /**
+     * Campo mascarado preenchido em todas as posições.
+     * @param {sap.m.MaskInput} campo
+     * @returns {boolean}
+     */
     function completo(campo) {
         const texto = valor(campo);
         return !!texto && texto.indexOf(MARCADOR) === -1;
     }
 
+    /**
+     * Remove a máscara (espaços, barra e marcadores), deixando só os dígitos.
+     * @param {string} texto
+     * @returns {string}
+     */
     function somenteDigitos(texto) {
         return String(texto || "").replace(/\D/g, "");
     }
 
-    /** Pedidos em que o pagamento pode ser feito (status ABERTO). */
+    /**
+     * Pedidos em que o pagamento pode ser feito (status ABERTO).
+     * @param {sap.ui.model.odata.v4.Context[]} contextos
+     * @returns {sap.ui.model.odata.v4.Context[]}
+     */
     function pedidosAbertos(contextos) {
         return (contextos || []).filter(function (contexto) {
             return contexto && contexto.getProperty("statusPedido_code") === "ABERTO";
         });
     }
 
+    /**
+     * Campo mascarado obrigatório.
+     * @param {string} mascara máscara do MaskInput
+     * @param {sap.base.i18n.ResourceBundle} textos i18n do app
+     * @param {string} chavePlaceholder chave do texto de dica
+     * @returns {sap.m.MaskInput}
+     */
     function criarCampo(mascara, textos, chavePlaceholder) {
         return new MaskInput({
             mask: mascara,
@@ -63,6 +88,14 @@ sap.ui.define([
         });
     }
 
+    /**
+     * Monta e abre o diálogo de pagamento. Confirmar só fica habilitado com o
+     * método escolhido e todos os campos completos (mês da validade de 01 a 12);
+     * a action é chamada pelo editFlow, que exibe as mensagens do backend e
+     * atualiza a tela.
+     * @param {sap.fe.core.ExtensionAPI} extensionAPI API da página (List Report ou Object Page)
+     * @param {sap.ui.model.odata.v4.Context[]} contextos pedidos ABERTO que receberão o pagamento
+     */
     function abrirDialogo(extensionAPI, contextos) {
         let dialogo = null;
         const textos = extensionAPI.getModel("i18n").getResourceBundle();
@@ -165,8 +198,10 @@ sap.ui.define([
 
     return {
         /**
-         * Handler da ação. Object Page: contexto da página; List Report:
-         * linhas selecionadas (só as que estão em ABERTO recebem o pagamento).
+         * Handler da ação. Object Page: contexto da página; List Report: linhas
+         * selecionadas (só as que estão em ABERTO recebem o pagamento).
+         * @param {sap.ui.model.odata.v4.Context} contexto contexto da página
+         * @param {sap.ui.model.odata.v4.Context[]} [contextosSelecionados] linhas selecionadas
          */
         abrir: function (contexto, contextosSelecionados) {
             const alvos = pedidosAbertos(contextosSelecionados && contextosSelecionados.length ? contextosSelecionados : [contexto]);
@@ -175,7 +210,12 @@ sap.ui.define([
             }
         },
 
-        /** Habilita a ação no List Report quando há pedido ABERTO selecionado. */
+        /**
+         * Habilita a ação no List Report quando há pedido ABERTO selecionado.
+         * @param {sap.ui.model.odata.v4.Context} _contexto contexto da página (não usado)
+         * @param {sap.ui.model.odata.v4.Context[]} contextosSelecionados
+         * @returns {boolean}
+         */
         habilitado: function (_contexto, contextosSelecionados) {
             return pedidosAbertos(contextosSelecionados).length > 0;
         }
