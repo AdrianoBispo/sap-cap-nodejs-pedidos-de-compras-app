@@ -117,9 +117,10 @@ annotate service.Enderecos with @(
   },
   UI.LineItem              : [
     {
-      $Type : 'UI.DataFieldForAction',
-      Action: 'ClientesService.definirEnderecoPrincipal',
-      Label : 'Definir como principal'
+      $Type        : 'UI.DataFieldForAction',
+      Action       : 'ClientesService.definirEnderecoPrincipal',
+      Label        : 'Definir como principal',
+      ![@UI.Hidden]: {$edmJson: {$Path: '/ClientesService.EntityContainer/Permissoes/somenteLeitura'}}
     },
     {
       Value            : cepFormatado,
@@ -150,6 +151,9 @@ annotate service.Enderecos with @(
     }],
     Visualizations: ['@UI.LineItem']
   },
+  // No cabeçalho da Object Page o UI.Hidden com caminho para o singleton não é
+  // avaliado: a visibilidade desta ação para o usuário só de consulta fica no
+  // manifest (EnderecosObjectPage > content > header > actions).
   UI.Identification        : [{
     $Type : 'UI.DataFieldForAction',
     Action: 'ClientesService.definirEnderecoPrincipal',
@@ -239,3 +243,18 @@ annotate service.CepsCadastrados with {
   estado        @title: 'Estado';
   qtdeEnderecos @title: 'Endereços com este CEP';
 };
+
+// Usuário só de consulta (não Admin): sem Criar, Editar e Excluir. O singleton
+// Permissoes traz somenteLeitura calculado pelos papéis do usuário logado; o
+// @restrict do serviço continua barrando a alteração no backend.
+annotate service.Clientes with @(
+  UI.CreateHidden: {$edmJson: {$Path: '/ClientesService.EntityContainer/Permissoes/somenteLeitura'}},
+  UI.UpdateHidden: {$edmJson: {$Path: '/ClientesService.EntityContainer/Permissoes/somenteLeitura'}},
+  UI.DeleteHidden: {$edmJson: {$Path: '/ClientesService.EntityContainer/Permissoes/somenteLeitura'}}
+);
+
+annotate service.Enderecos with @(
+  UI.CreateHidden: {$edmJson: {$Path: '/ClientesService.EntityContainer/Permissoes/somenteLeitura'}},
+  UI.UpdateHidden: {$edmJson: {$Path: '/ClientesService.EntityContainer/Permissoes/somenteLeitura'}},
+  UI.DeleteHidden: {$edmJson: {$Path: '/ClientesService.EntityContainer/Permissoes/somenteLeitura'}}
+);

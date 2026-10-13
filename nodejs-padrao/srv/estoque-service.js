@@ -11,6 +11,7 @@ import cds from '@sap/cds'
 import { gerarSku } from './lib/numeracao.js'
 import { importarItens } from './lib/importacao-estoque.js'
 import { erro, rejeitar } from './lib/mensagens.js'
+import { permissoesDoUsuario } from './lib/permissoes.js'
 import { chave, lerConteudo } from './lib/requisicao.js'
 import { prefixoCategoria, validarImagem } from './lib/util.js'
 
@@ -22,7 +23,7 @@ const STATUS_PEDIDO_ATIVO = ['ABERTO', 'AGUARDANDO_APROVACAO', 'PROCESSANDO_REEM
 export default class EstoqueService extends cds.ApplicationService {
   /** Registra os handlers de itens e importação. */
   init() {
-    const { Itens } = this.entities
+    const { Itens, Permissoes } = this.entities
     const db = cds.entities('pedidoscompras')
 
     this.before('NEW', Itens.drafts, req => {
@@ -89,6 +90,9 @@ export default class EstoqueService extends cds.ApplicationService {
       const item = await SELECT.one.from(db.Itens, ID).columns('qtdeReservada')
       if (item?.qtdeReservada > 0 || (await emPedido(ID, false))) erro(req, 409, 'ITEM_EXCLUSAO_BLOQUEADA')
     })
+
+    // Singleton lido pela UI para esconder o que o usuário não pode alterar (srv/lib/permissoes)
+    this.on('READ', Permissoes, req => permissoesDoUsuario(req))
 
     this.on('importarPlanilha', req => importarItens(req, this))
 

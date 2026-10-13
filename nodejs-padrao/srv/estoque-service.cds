@@ -1,5 +1,8 @@
 using {pedidoscompras as db} from '../db/schema';
-using {pedidoscompras.ResultadoImportacao} from './common';
+using {
+  pedidoscompras.ResultadoImportacao,
+  pedidoscompras.Permissoes as AspectoPermissoes
+} from './common';
 
 /**
  * Aplicação Gestão de Estoque.
@@ -28,6 +31,12 @@ service EstoqueService {
 
   @readonly
   entity StatusEstoque as projection on db.StatusEstoque;
+
+  /** Permissões do usuário logado (calculadas no handler a partir dos papéis). */
+  @odata.singleton
+  @readonly
+  @cds.persistence.skip
+  entity Permissoes : AspectoPermissoes {}
 
   /** Importação em massa por planilha (.xlsx ou .csv). Tudo ou nada. */
   @requires: 'Admin'

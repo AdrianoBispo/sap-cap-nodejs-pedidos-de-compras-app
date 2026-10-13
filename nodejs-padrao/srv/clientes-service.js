@@ -12,6 +12,7 @@ import { randomInt } from 'node:crypto'
 import { preencherEnderecoPorCep, validarEnderecosDoCliente } from './lib/enderecos.js'
 import { importarClientes } from './lib/importacao-clientes.js'
 import { erro, rejeitar } from './lib/mensagens.js'
+import { permissoesDoUsuario } from './lib/permissoes.js'
 import { chave, ehRascunho, lerConteudo } from './lib/requisicao.js'
 import { somenteDigitos, validarCpf, validarImagem } from './lib/util.js'
 
@@ -20,7 +21,7 @@ const { SELECT, UPDATE } = cds.ql
 export default class ClientesService extends cds.ApplicationService {
   /** Registra os handlers de clientes, endereços e importação. */
   init() {
-    const { Clientes, Enderecos } = this.entities
+    const { Clientes, Enderecos, Permissoes } = this.entities
     const db = cds.entities('pedidoscompras')
 
     /**
@@ -122,6 +123,9 @@ export default class ClientesService extends cds.ApplicationService {
     }
     this.on('definirEnderecoPrincipal', Enderecos, definirPrincipal)
     this.on('definirEnderecoPrincipal', Enderecos.drafts, definirPrincipal)
+
+    // Singleton lido pela UI para esconder o que o usuário não pode alterar (srv/lib/permissoes)
+    this.on('READ', Permissoes, req => permissoesDoUsuario(req))
 
     this.on('importarPlanilha', req => importarClientes(req, this))
 
