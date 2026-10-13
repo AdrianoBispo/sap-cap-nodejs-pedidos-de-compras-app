@@ -162,7 +162,7 @@ export default class PedidosService extends cds.ApplicationService {
     }
     const resultado = (ID: string) => this.run(SELECT.one.from(Pedidos).where({ ID }))
 
-    this.on('efetuarPagamento', Pedidos, async (req: Request<ParametrosPagamento>) => {
+    const pagar = async (req: Request<ParametrosPagamento>) => {
       const pedido = await pedidoAtivo(req)
       if (!pedido?.ID) return
       if (pedido.statusPedido_code !== STATUS.aberto) return erroStatus(req, pedido)
@@ -181,9 +181,9 @@ export default class PedidosService extends cds.ApplicationService {
       if (aprovado) info(req, 'PAGAMENTO_APROVADO')
       else aviso(req, 'PAGAMENTO_RECUSADO')
       return resultado(pedido.ID)
-    })
+    }
 
-    this.on('aprovarPedido', Pedidos, async req => {
+    const aprovar = async (req: Request) => {
       const pedido = await pedidoAtivo(req)
       if (!pedido?.ID) return
       if (pedido.statusPedido_code === STATUS.aberto) return erro(req, 409, 'PEDIDO_PAGAMENTO_PENDENTE')
@@ -199,15 +199,26 @@ export default class PedidosService extends cds.ApplicationService {
       })
       info(req, 'PEDIDO_FINALIZADO', { numero: pedido.numeroPedido })
       return resultado(pedido.ID)
-    })
+    }
 
-    this.on('cancelarPedido', Pedidos, async (req: Request<ParametrosCancelamento>) => {
+    const cancelar = async (req: Request<ParametrosCancelamento>) => {
       const pedido = await pedidoAtivo(req)
       if (!pedido?.ID) return
       await cancelarPedido(req, pedido, req.data.motivoCancelamento)
       if (req.errors) return
       return resultado(pedido.ID)
-    })
+    }
+
+    // As actions vinculadas também existem no rascunho (Pedidos.drafts), mas no
+    // lean draft o handler de Pedidos não vale para o rascunho: sem registrar
+    // os dois, a chamada no rascunho termina em 501 "has no handler" em vez
+    // da mensagem ACAO_SOMENTE_ATIVO.
+    this.on('efetuarPagamento', Pedidos, pagar)
+    this.on('efetuarPagamento', Pedidos.drafts, pagar)
+    this.on('aprovarPedido', Pedidos, aprovar)
+    this.on('aprovarPedido', Pedidos.drafts, aprovar)
+    this.on('cancelarPedido', Pedidos, cancelar)
+    this.on('cancelarPedido', Pedidos.drafts, cancelar)
 
     this.on(importarPlanilha, req => importarPedidos(req, this))
 
