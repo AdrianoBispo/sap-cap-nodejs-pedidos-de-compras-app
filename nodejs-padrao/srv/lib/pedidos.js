@@ -7,11 +7,17 @@
  *
  * Todas as funções rodam na transação da requisição: se qualquer passo
  * reporta erro (req.error), o CAP desfaz tudo ao final do handler.
+ *
+ * Concorrência: toda ação começa pela transição de status (transicionarPedido),
+ * um UPDATE condicional ao status lido. De duas operações simultâneas sobre o
+ * mesmo pedido só a primeira muda o status; a outra é recusada antes de mexer
+ * no estoque, no pagamento ou nos snapshots.
  */
 import cds from '@sap/cds'
-import { erro, info } from './mensagens.js'
+import { erro, aviso, info } from './mensagens.js'
 import { movimentarEstoque, MOVIMENTO } from './estoque.js'
 import { proximoNumeroPedido } from './numeracao.js'
+import { simularPagamento } from './pagamento-simulado.js'
 import { arredondar, formatarEndereco, somarQuantidades } from './util.js'
 
 const { SELECT, INSERT, UPDATE, DELETE } = cds.ql
@@ -88,6 +94,27 @@ export function erroStatus(req, pedido) {
   if (pedido.statusPedido_code === STATUS.finalizado) return erro(req, 409, 'PEDIDO_FINALIZADO_IMUTAVEL')
   if (pedido.statusPedido_code === STATUS.cancelado) return erro(req, 409, 'PEDIDO_CANCELADO_IMUTAVEL')
   return erro(req, 409, 'PEDIDO_STATUS_INVALIDO', { status: pedido.statusPedido_code })
+}
+
+/**
+ * Transição atômica do pedido: grava `dados` só se o pedido continua com o
+ * status e o status de pagamento lidos no início da ação. A condição é
+ * avaliada pelo banco no UPDATE, que também bloqueia a linha até o fim da
+ * transação; por isso deve ser a primeira gravação da ação.
+ * @param {import('@sap/cds').Request} req requisição que recebe o erro
+ * @param {{ID:string, numeroPedido?:string, statusPedido_code:string, statusPagamento_code:string}} pedido estado lido
+ * @param {object} dados campos a gravar
+ * @returns {Promise<boolean>} false, com PEDIDO_ALTERADO_CONCORRENTE registrado, se outra operação mudou o pedido
+ */
+export async function transicionarPedido(req, pedido, dados) {
+  const alterados = await UPDATE(db().Pedidos).with(dados).where({
+    ID: pedido.ID,
+    statusPedido_code: pedido.statusPedido_code,
+    statusPagamento_code: pedido.statusPagamento_code
+  })
+  if (alterados === 1) return true
+  erro(req, 409, 'PEDIDO_ALTERADO_CONCORRENTE', { numero: pedido.numeroPedido })
+  return false
 }
 
 /**
@@ -181,6 +208,8 @@ export async function atualizarPedidoAberto(req, pedidoID) {
     return erro(req, 409, 'PEDIDO_CLIENTE_IMUTAVEL', {}, 'cliente_ID')
   }
   removerCamposControlados(pedido)
+  // Garante que nenhuma ação mudou o status desde a leitura (e bloqueia o pedido)
+  if (!(await transicionarPedido(req, atual, { statusPedido_code: STATUS.aberto }))) return
   if (!pedido.itens) return // só campos do cabeçalho (ex.: observação)
 
   const itens = pedido.itens
@@ -354,6 +383,55 @@ export async function liberarReservaDoPedido(req, pedidoID) {
 }
 
 /**
+ * Pagamento (action efetuarPagamento) de pedido ABERTO. Os dados do cartão
+ * ficam só em memória; grava-se apenas o resultado seguro. Aprovado, o pedido
+ * vai para AGUARDANDO_APROVACAO; recusado, segue ABERTO para nova tentativa.
+ * @param {import('@sap/cds').Request} req
+ * @param {object} pedido pedido lido por lerPedidoParaAcao
+ * @param {{metodoPagamento?:string, numeroCartao?:string, validade?:string, cvv?:string}} cartao dados digitados
+ * @returns {Promise<void>}
+ */
+export async function efetuarPagamento(req, pedido, { metodoPagamento, numeroCartao, validade, cvv }) {
+  if (pedido.statusPedido_code !== STATUS.aberto) return erroStatus(req, pedido)
+  const simulacao = simularPagamento({ metodo: metodoPagamento, numero: numeroCartao, validade, cvv })
+  if (!simulacao.dadosValidos) return erro(req, 400, 'CARTAO_DADOS_INVALIDOS', { erro: simulacao.erro })
+
+  const aprovado = simulacao.status === STATUS_PAGAMENTO.aprovado
+  const mudou = await transicionarPedido(req, pedido, {
+    statusPagamento_code: simulacao.status,
+    statusPedido_code: aprovado ? STATUS.aguardandoAprovacao : STATUS.aberto
+  })
+  if (!mudou) return
+  await gravarPagamento(pedido.ID, simulacao)
+  if (aprovado) info(req, 'PAGAMENTO_APROVADO')
+  else aviso(req, 'PAGAMENTO_RECUSADO')
+}
+
+/**
+ * Aprovação (action aprovarPedido) de pedido AGUARDANDO_APROVACAO com
+ * pagamento aprovado: finaliza o pedido, baixa o estoque reservado e gera os
+ * snapshots.
+ * @param {import('@sap/cds').Request} req
+ * @param {object} pedido pedido lido por lerPedidoParaAcao
+ * @returns {Promise<void>}
+ */
+export async function finalizarPedido(req, pedido) {
+  if (pedido.statusPedido_code === STATUS.aberto) return erro(req, 409, 'PEDIDO_PAGAMENTO_PENDENTE')
+  if (pedido.statusPedido_code !== STATUS.aguardandoAprovacao) return erroStatus(req, pedido)
+  if (pedido.statusPagamento_code !== STATUS_PAGAMENTO.aprovado) return erro(req, 409, 'PEDIDO_PAGAMENTO_PENDENTE')
+
+  const finalizado = await transicionarPedido(req, pedido, {
+    statusPedido_code: STATUS.finalizado,
+    dataFinalizacao: new Date().toISOString()
+  })
+  if (!finalizado) return
+  // Baixa estoque e reserva (a condição no banco confere a reserva)
+  if (!(await movimentarEstoque(req, MOVIMENTO.baixar, await reservaAtual(pedido.ID)))) return
+  await criarSnapshots(req, pedido, 'FINALIZACAO')
+  info(req, 'PEDIDO_FINALIZADO', { numero: pedido.numeroPedido })
+}
+
+/**
  * Cancelamento (action cancelarPedido) de pedido ABERTO ou
  * AGUARDANDO_APROVACAO, com motivo obrigatório. Sem pagamento aprovado:
  * libera a reserva, gera os snapshots e cancela. Com pagamento aprovado:
@@ -372,14 +450,15 @@ export async function cancelarPedido(req, pedido, motivo) {
   if (pedido.statusPagamento_code === STATUS_PAGAMENTO.aprovado) {
     return iniciarReembolso(req, pedido, motivoLimpo)
   }
-  if (!(await liberarReservaDoPedido(req, pedido.ID))) return
-  await criarSnapshots(req, pedido, 'CANCELAMENTO')
-  await UPDATE(db().Pedidos, pedido.ID).with({
+  const cancelado = await transicionarPedido(req, pedido, {
     statusPedido_code: STATUS.cancelado,
     motivoCancelamento: motivoLimpo,
     dataCancelamento: new Date().toISOString(),
     canceladoPor: req.user.id
   })
+  if (!cancelado) return
+  if (!(await liberarReservaDoPedido(req, pedido.ID))) return
+  await criarSnapshots(req, pedido, 'CANCELAMENTO')
   info(req, 'PEDIDO_CANCELADO', { numero: pedido.numeroPedido })
 }
 
@@ -392,6 +471,11 @@ export async function cancelarPedido(req, pedido, motivo) {
  * @returns {Promise<void>}
  */
 async function iniciarReembolso(req, pedido, motivo) {
+  const mudou = await transicionarPedido(req, pedido, {
+    statusPedido_code: STATUS.processandoReembolso,
+    motivoCancelamento: motivo
+  })
+  if (!mudou) return
   await INSERT.into(db().Reembolsos).entries({
     pedido_ID: pedido.ID,
     numeroPedido: pedido.numeroPedido,
@@ -403,10 +487,6 @@ async function iniciarReembolso(req, pedido, motivo) {
     motivoSolicitacao: motivo,
     dataSolicitacao: new Date().toISOString(),
     solicitadoPor: req.user.id
-  })
-  await UPDATE(db().Pedidos, pedido.ID).with({
-    statusPedido_code: STATUS.processandoReembolso,
-    motivoCancelamento: motivo
   })
   info(req, 'PEDIDO_REEMBOLSO_SOLICITADO', { numero: pedido.numeroPedido })
 }
@@ -422,14 +502,15 @@ export async function cancelarPorReembolso(req, pedidoID) {
   if (!pedido || pedido.statusPedido_code !== STATUS.processandoReembolso) {
     return erroStatus(req, pedido ?? { statusPedido_code: '?' })
   }
-  if (!(await liberarReservaDoPedido(req, pedidoID))) return
-  await criarSnapshots(req, pedido, 'CANCELAMENTO')
-  await UPDATE(db().Pedidos, pedidoID).with({
+  const cancelado = await transicionarPedido(req, pedido, {
     statusPedido_code: STATUS.cancelado,
     statusPagamento_code: STATUS_PAGAMENTO.devolvido,
     dataCancelamento: new Date().toISOString(),
     canceladoPor: req.user.id
   })
+  if (!cancelado) return
+  if (!(await liberarReservaDoPedido(req, pedidoID))) return
+  await criarSnapshots(req, pedido, 'CANCELAMENTO')
   await UPDATE(db().Pagamentos).with({ statusPagamento_code: STATUS_PAGAMENTO.devolvido }).where({ pedido_ID: pedidoID })
   return pedido
 }
@@ -447,7 +528,7 @@ export async function retomarPedido(req, pedidoID, statusAnterior) {
     return erroStatus(req, pedido ?? { statusPedido_code: '?' })
   }
   if (!statusAnterior) return erro(req, 400, 'CAMPO_OBRIGATORIO', { campo: 'Status anterior' })
-  await UPDATE(db().Pedidos, pedidoID).with({ statusPedido_code: statusAnterior, motivoCancelamento: null })
+  if (!(await transicionarPedido(req, pedido, { statusPedido_code: statusAnterior, motivoCancelamento: null }))) return
   return pedido
 }
 

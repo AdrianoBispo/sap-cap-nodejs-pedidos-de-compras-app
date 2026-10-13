@@ -12,13 +12,11 @@
 import cds from '@sap/cds'
 import {
   STATUS, STATUS_PAGAMENTO, MOEDA_PADRAO,
-  enderecoPrincipal, reservaAtual, erroStatus, registrarPedido, atualizarPedidoAberto, removerCamposControlados,
-  lerPedidoParaAcao, criarSnapshots, cancelarPedido, gravarPagamento
+  enderecoPrincipal, reservaAtual, registrarPedido, atualizarPedidoAberto, removerCamposControlados,
+  lerPedidoParaAcao, efetuarPagamento, finalizarPedido, cancelarPedido
 } from './lib/pedidos.js'
-import { movimentarEstoque, MOVIMENTO } from './lib/estoque.js'
-import { simularPagamento } from './lib/pagamento-simulado.js'
 import { importarPedidos } from './lib/importacao-pedidos.js'
-import { erro, aviso, info, rejeitar } from './lib/mensagens.js'
+import { erro, aviso, rejeitar } from './lib/mensagens.js'
 import { chave, ehRascunho } from './lib/requisicao.js'
 import { arredondar } from './lib/util.js'
 
@@ -160,52 +158,26 @@ export default class PedidosService extends cds.ApplicationService {
     const resultado = ID => this.run(SELECT.one.from(Pedidos).where({ ID }))
 
     /**
-     * Action efetuarPagamento: pedido ABERTO, dados do cartão só em memória.
-     * Aprovado, o pedido vai para AGUARDANDO_APROVACAO; recusado, segue ABERTO
-     * para nova tentativa.
+     * Action efetuarPagamento (ver efetuarPagamento em srv/lib/pedidos).
      * @param {import('@sap/cds').Request} req parâmetros do cartão
      */
     const pagar = async req => {
       const pedido = await pedidoAtivo(req)
       if (!pedido) return
-      if (pedido.statusPedido_code !== STATUS.aberto) return erroStatus(req, pedido)
-
-      // Dados do cartão: somente em memória, nunca persistidos ou registrados
-      const { metodoPagamento, numeroCartao, validade, cvv } = req.data
-      const simulacao = simularPagamento({ metodo: metodoPagamento, numero: numeroCartao, validade, cvv })
-      if (!simulacao.dadosValidos) return erro(req, 400, 'CARTAO_DADOS_INVALIDOS', { erro: simulacao.erro })
-
-      await gravarPagamento(pedido.ID, simulacao)
-      const aprovado = simulacao.status === STATUS_PAGAMENTO.aprovado
-      await UPDATE(db.Pedidos, pedido.ID).with({
-        statusPagamento_code: simulacao.status,
-        statusPedido_code: aprovado ? STATUS.aguardandoAprovacao : STATUS.aberto
-      })
-      if (aprovado) info(req, 'PAGAMENTO_APROVADO')
-      else aviso(req, 'PAGAMENTO_RECUSADO')
+      await efetuarPagamento(req, pedido, req.data)
+      if (req.errors) return
       return resultado(pedido.ID)
     }
 
     /**
-     * Action aprovarPedido: pedido AGUARDANDO_APROVACAO com pagamento aprovado.
-     * Baixa o estoque reservado, gera os snapshots e finaliza o pedido.
+     * Action aprovarPedido (ver finalizarPedido em srv/lib/pedidos).
      * @param {import('@sap/cds').Request} req
      */
     const aprovar = async req => {
       const pedido = await pedidoAtivo(req)
       if (!pedido) return
-      if (pedido.statusPedido_code === STATUS.aberto) return erro(req, 409, 'PEDIDO_PAGAMENTO_PENDENTE')
-      if (pedido.statusPedido_code !== STATUS.aguardandoAprovacao) return erroStatus(req, pedido)
-      if (pedido.statusPagamento_code !== STATUS_PAGAMENTO.aprovado) return erro(req, 409, 'PEDIDO_PAGAMENTO_PENDENTE')
-
-      // Baixa QtdeEstoque e QtdeReservada (a condição no banco confere a reserva)
-      if (!(await movimentarEstoque(req, MOVIMENTO.baixar, await reservaAtual(pedido.ID)))) return
-      await criarSnapshots(req, pedido, 'FINALIZACAO')
-      await UPDATE(db.Pedidos, pedido.ID).with({
-        statusPedido_code: STATUS.finalizado,
-        dataFinalizacao: new Date().toISOString()
-      })
-      info(req, 'PEDIDO_FINALIZADO', { numero: pedido.numeroPedido })
+      await finalizarPedido(req, pedido)
+      if (req.errors) return
       return resultado(pedido.ID)
     }
 

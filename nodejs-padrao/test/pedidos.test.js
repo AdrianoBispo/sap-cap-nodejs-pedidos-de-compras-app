@@ -2,9 +2,13 @@
  * Ciclo de vida do pedido: registro com reserva de estoque, edição dos itens,
  * pagamento, aprovação e cancelamento.
  */
+import cds from '@sap/cds'
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { iniciarServidor, falha, COMUM } from './apoio/contexto.js'
+import { cancelarPedido, efetuarPagamento, finalizarPedido } from '../srv/lib/pedidos.js'
+
+const { SELECT } = cds.ql
 
 const api = iniciarServidor()
 const P = '/odata/v4/pedidos'
@@ -244,6 +248,38 @@ describe('Pedidos de Compras', () => {
       assert.equal(reembolsos.value.length, 1)
       assert.equal(reembolsos.value[0].statusReembolso_code, 'PENDENTE')
       assert.equal(reembolsos.value[0].statusPedidoAnterior_code, 'AGUARDANDO_APROVACAO')
+    })
+
+    it('ação com leitura desatualizada do pedido (outra operação venceu a corrida) é recusada sem efeito', async () => {
+      const item = await itemComEstoque()
+      const aberto = await pedidoRegistrado([{ item: item.ID, qtde: 2 }])
+      const pago = await pedidoRegistrado([{ item: item.ID, qtde: 1 }])
+      await acao(pago.ID, 'efetuarPagamento', CARTAO_OK)
+      // Leituras feitas antes de outra operação mudar os pedidos
+      const lidoAberto = await SELECT.one.from('pedidoscompras.Pedidos', aberto.ID)
+      const lidoPago = await SELECT.one.from('pedidoscompras.Pedidos', pago.ID)
+      await acao(aberto.ID, 'cancelarPedido', { motivoCancelamento: 'Primeiro cancelamento' })
+      await acao(pago.ID, 'cancelarPedido', { motivoCancelamento: 'Desistência' })
+      const antes = await saldo(item.ID)
+
+      // As mesmas ações, executadas com as leituras antigas, como numa corrida
+      for (const [nome, executar] of [
+        ['cancelar', req => cancelarPedido(req, lidoAberto, 'Cancelamento concorrente')],
+        ['pagar', req => efetuarPagamento(req, lidoAberto, CARTAO_OK)],
+        ['aprovar', req => finalizarPedido(req, lidoPago)]
+      ]) {
+        const req = new cds.Request({ event: 'corrida', user: cds.User.privileged })
+        await cds.tx(() => executar(req))
+        assert.deepEqual(Array.from(req.errors ?? [], e => e.message), ['PEDIDO_ALTERADO_CONCORRENTE'], nome)
+      }
+
+      assert.deepEqual(await saldo(item.ID), antes, 'estoque e reserva intactos')
+      const { data: cancelado } = await api.get(`${P}/Pedidos${api.chave(aberto.ID)}?$expand=pagamento`)
+      assert.equal(cancelado.statusPedido_code, 'CANCELADO')
+      assert.equal(cancelado.motivoCancelamento, 'Primeiro cancelamento')
+      assert.equal(cancelado.pagamento, null)
+      const { data: reembolso } = await api.get(`${P}/Pedidos${api.chave(pago.ID)}`)
+      assert.equal(reembolso.statusPedido_code, 'PROCESSANDO_REEMBOLSO')
     })
 
     it('ações não são executadas sobre o rascunho nem durante a edição', async () => {
