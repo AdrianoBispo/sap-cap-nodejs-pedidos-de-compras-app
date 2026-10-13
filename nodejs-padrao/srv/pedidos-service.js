@@ -1,9 +1,9 @@
 /**
- * Handlers do serviço Pedidos de Compras (porte de ZBP_R_PC_PEDIDO).
+ * Handlers do serviço Pedidos de Compras (PedidosService).
  *
  *  - Rascunho: status inicial, endereço principal do cliente, preço/total
- *    provisórios dos itens (com side effects na UI) e bloqueio de item sem
- *    estoque (precheck).
+ *    provisórios dos itens (com side effects na UI) e recusa imediata de
+ *    item sem estoque.
  *  - Save: o primeiro Save registra o pedido (ABERTO), gera o número e
  *    reserva o estoque; o Save de uma edição ajusta a reserva pela diferença.
  *  - Ações: efetuarPagamento, aprovarPedido e cancelarPedido, somente sobre o
@@ -11,8 +11,8 @@
  */
 import cds from '@sap/cds'
 import {
-  STATUS, STATUS_PAGAMENTO, MOEDA_PADRAO, CAMPOS_CONTROLADOS,
-  enderecoPrincipal, reservaAtual, erroStatus, registrarPedido, atualizarPedidoAberto,
+  STATUS, STATUS_PAGAMENTO, MOEDA_PADRAO,
+  enderecoPrincipal, reservaAtual, erroStatus, registrarPedido, atualizarPedidoAberto, removerCamposControlados,
   lerPedidoParaAcao, criarSnapshots, cancelarPedido, gravarPagamento
 } from './lib/pedidos.js'
 import { movimentarEstoque, MOVIMENTO } from './lib/estoque.js'
@@ -25,6 +25,7 @@ import { arredondar } from './lib/util.js'
 const { SELECT, UPDATE } = cds.ql
 
 export default class PedidosService extends cds.ApplicationService {
+  /** Registra os handlers de rascunho, Save, ações do ciclo de vida e importação. */
   init() {
     const { Pedidos, ItensPedido } = this.entities
     const db = cds.entities('pedidoscompras')
@@ -45,7 +46,7 @@ export default class PedidosService extends cds.ApplicationService {
     // Troca de cliente: usa o endereço principal atual (side effect na UI).
     // Status, número, totais e endereço são mantidos só pelo backend.
     this.before('PATCH', Pedidos.drafts, async req => {
-      for (const campo of CAMPOS_CONTROLADOS) delete req.data[campo]
+      removerCamposControlados(req.data)
       if (!('cliente_ID' in req.data)) return
       const rascunho = await SELECT.one.from(Pedidos.drafts, chave(req)).columns('numeroPedido')
       if (rascunho?.numeroPedido) return rejeitar(req, 409, 'PEDIDO_CLIENTE_IMUTAVEL', {}, 'cliente_ID')
@@ -59,8 +60,14 @@ export default class PedidosService extends cds.ApplicationService {
       if (req.data.cliente_ID && !endereco) aviso(req, 'CLIENTE_SEM_ENDERECO_PRINCIPAL', {}, 'cliente_ID')
     })
 
-    // Preço provisório, total e SKU da linha; item sem estoque é barrado na
-    // hora. `linha` é o estado gravado no rascunho (só o pedido, na criação).
+    /**
+     * Preço provisório, total e SKU da linha do rascunho; item sem estoque é
+     * recusado na hora (exceto se já estiver reservado pelo pedido). Item que
+     * já está no pedido gravado mantém o preço fixado.
+     * @param {import('@sap/cds').Request} req NEW ou PATCH da linha
+     * @param {{pedido_ID?:string, item_ID?:string, qtdeItemPedido?:number}|undefined} linha estado
+     *   gravado no rascunho (na criação, só o pedido)
+     */
     const calcularLinha = async (req, linha) => {
       const itemID = 'item_ID' in req.data ? req.data.item_ID : linha?.item_ID
       const qtde = Number('qtdeItemPedido' in req.data ? req.data.qtdeItemPedido : linha?.qtdeItemPedido) || 0
@@ -96,7 +103,10 @@ export default class PedidosService extends cds.ApplicationService {
       return calcularLinha(req, linha)
     })
 
-    // Total do pedido no rascunho (soma das linhas)
+    /**
+     * Recalcula o total do pedido no rascunho (soma das linhas).
+     * @param {string|null|undefined} pedidoID
+     */
     const recalcularTotalRascunho = async pedidoID => {
       if (!pedidoID) return
       const linhas = await SELECT.from(ItensPedido.drafts).columns('valorTotal').where({ pedido_ID: pedidoID })
@@ -132,6 +142,12 @@ export default class PedidosService extends cds.ApplicationService {
     // Ações do ciclo de vida (somente sobre o pedido ativo)
     // ------------------------------------------------------------------
 
+    /**
+     * Pedido alvo de uma ação do ciclo de vida: as ações só valem para o
+     * pedido ativo, sem rascunho de edição aberto.
+     * @param {import('@sap/cds').Request} req
+     * @returns o pedido, ou null com o erro registrado
+     */
     const pedidoAtivo = async req => {
       if (ehRascunho(req)) {
         erro(req, 409, 'ACAO_SOMENTE_ATIVO')
@@ -139,9 +155,17 @@ export default class PedidosService extends cds.ApplicationService {
       }
       return lerPedidoParaAcao(req, chave(req))
     }
+
+    /** Relê o pedido pela projeção do serviço (resposta das actions). */
     const resultado = ID => this.run(SELECT.one.from(Pedidos).where({ ID }))
 
-    this.on('efetuarPagamento', Pedidos, async req => {
+    /**
+     * Action efetuarPagamento: pedido ABERTO, dados do cartão só em memória.
+     * Aprovado, o pedido vai para AGUARDANDO_APROVACAO; recusado, segue ABERTO
+     * para nova tentativa.
+     * @param {import('@sap/cds').Request} req parâmetros do cartão
+     */
+    const pagar = async req => {
       const pedido = await pedidoAtivo(req)
       if (!pedido) return
       if (pedido.statusPedido_code !== STATUS.aberto) return erroStatus(req, pedido)
@@ -160,9 +184,14 @@ export default class PedidosService extends cds.ApplicationService {
       if (aprovado) info(req, 'PAGAMENTO_APROVADO')
       else aviso(req, 'PAGAMENTO_RECUSADO')
       return resultado(pedido.ID)
-    })
+    }
 
-    this.on('aprovarPedido', Pedidos, async req => {
+    /**
+     * Action aprovarPedido: pedido AGUARDANDO_APROVACAO com pagamento aprovado.
+     * Baixa o estoque reservado, gera os snapshots e finaliza o pedido.
+     * @param {import('@sap/cds').Request} req
+     */
+    const aprovar = async req => {
       const pedido = await pedidoAtivo(req)
       if (!pedido) return
       if (pedido.statusPedido_code === STATUS.aberto) return erro(req, 409, 'PEDIDO_PAGAMENTO_PENDENTE')
@@ -178,15 +207,31 @@ export default class PedidosService extends cds.ApplicationService {
       })
       info(req, 'PEDIDO_FINALIZADO', { numero: pedido.numeroPedido })
       return resultado(pedido.ID)
-    })
+    }
 
-    this.on('cancelarPedido', Pedidos, async req => {
+    /**
+     * Action cancelarPedido: cancela o pedido ou, com pagamento aprovado, abre a
+     * solicitação de reembolso (ver cancelarPedido em srv/lib/pedidos).
+     * @param {import('@sap/cds').Request} req motivo do cancelamento
+     */
+    const cancelar = async req => {
       const pedido = await pedidoAtivo(req)
       if (!pedido) return
       await cancelarPedido(req, pedido, req.data.motivoCancelamento)
       if (req.errors) return
       return resultado(pedido.ID)
-    })
+    }
+
+    // As actions vinculadas também existem no rascunho (Pedidos.drafts), mas no
+    // lean draft o handler de Pedidos não vale para o rascunho: sem registrar
+    // os dois, a chamada no rascunho termina em 501 "has no handler" em vez
+    // da mensagem ACAO_SOMENTE_ATIVO.
+    this.on('efetuarPagamento', Pedidos, pagar)
+    this.on('efetuarPagamento', Pedidos.drafts, pagar)
+    this.on('aprovarPedido', Pedidos, aprovar)
+    this.on('aprovarPedido', Pedidos.drafts, aprovar)
+    this.on('cancelarPedido', Pedidos, cancelar)
+    this.on('cancelarPedido', Pedidos.drafts, cancelar)
 
     this.on('importarPlanilha', req => importarPedidos(req, this))
 

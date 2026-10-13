@@ -1,10 +1,10 @@
 /**
- * Leitura de planilhas .xlsx e .csv para a importação em massa
- * (porte de ZCL_PC_PLANILHA).
+ * Leitura de planilhas .xlsx e .csv para a importação em massa.
  *
  *  - XLSX: lido sem bibliotecas externas (ZIP via zlib nativo + XML da
  *    primeira aba). Aceita textos compartilhados (sharedStrings) e textos
- *    "inline" (inlineStr), inclusive arquivos gerados pelo LibreOffice.
+ *    "inline" (inlineStr), inclusive arquivos gerados pelo LibreOffice. Cada
+ *    parte descompactada é limitada a MAX_DESCOMPACTADO ("zip bomb").
  *  - CSV: separador ";", "," ou tabulação (detectado pelo cabeçalho), UTF-8
  *    com ou sem BOM; se não for UTF-8 válido, assume Windows-1252/ISO-8859-1.
  *  - A primeira linha não vazia é o cabeçalho. Os nomes de coluna são
@@ -14,19 +14,30 @@
 import { TextDecoder } from 'node:util'
 import { inflateRawSync } from 'node:zlib'
 
+/** Máximo de linhas de dados por arquivo (a importação grava tudo numa única transação). */
 export const MAX_LINHAS = 500
 
-/** "Data de nascimento" -> "DATADENASCIMENTO". */
+/** Tamanho máximo de cada parte descompactada do .xlsx (50 MB). */
+export const MAX_DESCOMPACTADO = 50 * 1024 * 1024
+
+/**
+ * Normaliza um nome de coluna para comparação: sem acentos, espaços,
+ * pontuação e em maiúsculas ("Data de nascimento" -> "DATADENASCIMENTO").
+ * @param {unknown} texto
+ * @returns {string}
+ */
 export function normalizarNome(texto) {
   return String(texto ?? '')
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .toUpperCase().replace(/[^A-Z0-9]/g, '')
 }
 
 /**
- * Lê a planilha e devolve os registros por nome de campo.
- * @param {Buffer} conteudo
- * @param {{campo:string, sinonimos?:string[], obrigatoria?:boolean}[]} colunas
+ * Lê a planilha (.xlsx pela assinatura ZIP; senão CSV) e devolve os
+ * registros por nome de campo. Problemas de leitura, de cabeçalho ou de
+ * tamanho voltam em "erros" (nenhum registro é devolvido nesse caso).
+ * @param {Buffer|null|undefined} conteudo bytes do arquivo
+ * @param {{campo:string, sinonimos?:string[], obrigatoria?:boolean}[]} colunas colunas esperadas
  * @returns {{registros:{linha:number, valores:Record<string,string>}[], erros:string[]}}
  */
 export function lerPlanilha(conteudo, colunas) {
@@ -43,12 +54,22 @@ export function lerPlanilha(conteudo, colunas) {
   return mapearRegistros(linhas, colunas)
 }
 
-/** Valor (texto sem espaços nas pontas) de um campo do registro. */
+/**
+ * Valor de um campo do registro, como texto sem espaços nas pontas ('' se ausente).
+ * @param {{valores:Record<string,string>}} registro
+ * @param {string} campo nome do campo em COLUNAS
+ * @returns {string}
+ */
 export function valor(registro, campo) {
   return String(registro.valores[campo] ?? '').trim()
 }
 
-/** AAAA-MM-DD, DD/MM/AAAA ou número de série do Excel -> 'AAAA-MM-DD' (ou null). */
+/**
+ * Converte AAAA-MM-DD, DD/MM/AAAA ou número de série do Excel em 'AAAA-MM-DD'.
+ * Datas inexistentes (ex.: 31/02/2000) são recusadas.
+ * @param {unknown} texto
+ * @returns {string|null} data ISO ou null se inválida
+ */
 export function paraData(texto) {
   const t = String(texto ?? '').trim()
   let ano, mes, dia
@@ -66,7 +87,12 @@ export function paraData(texto) {
   return data.toISOString().slice(0, 10)
 }
 
-/** "1.234,56", "1234,56" ou "1234.56" -> 1234.56 (ou null). */
+/**
+ * Converte número em formato brasileiro ou internacional ("1.234,56",
+ * "1234,56", "1234.56", com ou sem "R$") em número.
+ * @param {unknown} texto
+ * @returns {number|null} null se não for número
+ */
 export function paraDecimal(texto) {
   let t = String(texto ?? '').trim().replace(/^R\$\s*/i, '')
   if (!t) return null
@@ -75,7 +101,11 @@ export function paraDecimal(texto) {
   return Number(t)
 }
 
-/** Inteiro (aceita "10", "10.0" ou "10,0"); null se não for inteiro. */
+/**
+ * Converte em número inteiro (aceita "10", "10.0" ou "10,0").
+ * @param {unknown} texto
+ * @returns {number|null} null se vazio, não numérico ou com casas decimais
+ */
 export function paraInteiro(texto) {
   const numero = paraDecimal(texto)
   return numero !== null && Number.isInteger(numero) ? numero : null
@@ -85,6 +115,11 @@ export function paraInteiro(texto) {
 // Cabeçalho e registros
 // ---------------------------------------------------------------------------
 
+/**
+ * Localiza as colunas pelo cabeçalho (primeira linha não vazia) por nome ou
+ * sinônimo e monta os registros. Aponta colunas obrigatórias ausentes,
+ * planilha sem dados e excesso de linhas.
+ */
 function mapearRegistros(linhas, colunas) {
   const erros = []
   const naoVazias = linhas.filter(l => l.celulas.some(c => String(c ?? '').trim() !== ''))
@@ -115,6 +150,12 @@ function mapearRegistros(linhas, colunas) {
 // CSV
 // ---------------------------------------------------------------------------
 
+/**
+ * Divide o CSV em linhas e células. Detecta a codificação (UTF-8, senão
+ * Windows-1252) e o separador (o mais frequente no cabeçalho). Aspas
+ * duplas delimitam células, "" é aspas literal e quebras de linha entre
+ * aspas fazem parte da célula.
+ */
 function lerCsv(conteudo) {
   let texto
   try {
@@ -155,6 +196,7 @@ function lerCsv(conteudo) {
   return linhas
 }
 
+/** Quantas vezes o separador aparece fora de aspas (detecção do separador). */
 function contarForaDeAspas(linha, separador) {
   let total = 0
   let entreAspas = false
@@ -169,6 +211,11 @@ function contarForaDeAspas(linha, separador) {
 // XLSX (ZIP + SpreadsheetML)
 // ---------------------------------------------------------------------------
 
+/**
+ * Lê o diretório central do ZIP e devolve um leitor de entradas por nome;
+ * cada entrada só é descompactada quando lida. Aceita entradas sem
+ * compressão (método 0) ou deflate (método 8).
+ */
 function lerZip(buffer) {
   let eocd = buffer.length - 22
   while (eocd >= 0 && buffer.readUInt32LE(eocd) !== 0x06054b50) eocd--
@@ -187,7 +234,7 @@ function lerZip(buffer) {
     const nome = buffer.toString('utf8', pos + 46, pos + 46 + tamNome)
     const inicio = local + 30 + buffer.readUInt16LE(local + 26) + buffer.readUInt16LE(local + 28)
     const dados = buffer.subarray(inicio, inicio + tamanho)
-    arquivos.set(nome, () => (metodo === 0 ? dados : metodo === 8 ? inflateRawSync(dados) : null))
+    arquivos.set(nome, () => (metodo === 0 ? dados : metodo === 8 ? descompactar(dados) : null))
     pos += 46 + tamNome + tamExtra + tamComentario
   }
   return {
@@ -199,6 +246,19 @@ function lerZip(buffer) {
   }
 }
 
+/** Descompacta uma entrada deflate, recusando conteúdo acima de MAX_DESCOMPACTADO. */
+function descompactar(dados) {
+  try {
+    return inflateRawSync(dados, { maxOutputLength: MAX_DESCOMPACTADO })
+  } catch (e) {
+    if (e.code === 'ERR_BUFFER_TOO_LARGE') {
+      throw new Error(`o conteúdo descompactado excede ${MAX_DESCOMPACTADO / 1024 / 1024} MB`, { cause: e })
+    }
+    throw e
+  }
+}
+
+/** Converte as entidades XML (&amp;, &lt;, &#123;, &#x7B;...) em texto. */
 function decodificarXml(texto) {
   return texto
     .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
@@ -213,11 +273,16 @@ function textoDe(xml) {
   return [...semFonetica.matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)].map(m => decodificarXml(m[1])).join('')
 }
 
+/** Letras da referência da célula -> índice da coluna (A -> 0, Z -> 25, AA -> 26). */
 function indiceColuna(referencia) {
   const letras = String(referencia).match(/^[A-Z]+/)?.[0] ?? 'A'
   return [...letras].reduce((acc, l) => acc * 26 + (l.charCodeAt(0) - 64), 0) - 1
 }
 
+/**
+ * Linhas da primeira aba. Cada célula é posicionada pela referência (ex.:
+ * C7) e convertida em texto: compartilhada, inline, booleana ou número.
+ */
 function lerXlsx(conteudo) {
   const zip = lerZip(conteudo)
   const compartilhados = []
@@ -248,6 +313,10 @@ function lerXlsx(conteudo) {
   return linhas
 }
 
+/**
+ * Caminho da primeira aba no pacote, resolvido por workbook.xml e pelas
+ * relações do workbook; na falta delas, xl/worksheets/sheet1.xml.
+ */
 function primeiraAba(zip) {
   const workbook = zip.ler('xl/workbook.xml')
   const rels = zip.ler('xl/_rels/workbook.xml.rels')

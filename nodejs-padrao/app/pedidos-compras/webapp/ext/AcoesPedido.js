@@ -6,9 +6,16 @@
 sap.ui.define([], function () {
     "use strict";
 
+    /** Status em que o pedido não aceita mais ações. */
     const ENCERRADOS = ["FINALIZADO", "CANCELADO"];
 
     return {
+        /**
+         * Visibilidade das ações no List Report.
+         * @param {sap.ui.model.odata.v4.Context} _contextoPagina contexto da página (não usado)
+         * @param {sap.ui.model.odata.v4.Context[]} contextosSelecionados linhas selecionadas
+         * @returns {boolean} true se alguma linha selecionada não está encerrada
+         */
         visivel: function (_contextoPagina, contextosSelecionados) {
             return (contextosSelecionados || []).some(function (contexto) {
                 const status = contexto.getProperty("statusPedido_code");

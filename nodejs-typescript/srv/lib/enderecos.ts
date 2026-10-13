@@ -1,7 +1,7 @@
 /**
- * Endereços do cliente: preenchimento pelo CEP e validações de gravação
- * (porte de PreencherEnderecoViaCep, ValidarCep, ValidarCepUnico,
- * ValidarNumero e DefinirPrincipalInicial do BO Cliente).
+ * Endereços do cliente: preenchimento a partir do CEP (CEP já validado no
+ * cadastro ou consulta ao ViaCEP) e validações dos endereços no Save do
+ * cliente.
  */
 import type { Request } from '@sap/cds'
 import { Enderecos, StatusCep, type Endereco } from '#cds-models/pedidoscompras'
@@ -9,7 +9,7 @@ import { consultarCep } from './viacep.js'
 import { somenteDigitos } from './util.js'
 import { erro, aviso } from './mensagens.js'
 
-/** Situação da consulta de CEP (enum StatusCep do modelo: V, I ou X). */
+/** Valores de Enderecos.cepStatus (tipo StatusCep do modelo). */
 export const STATUS_CEP = Object.freeze({
   validado: StatusCep.Validado,
   invalido: StatusCep.Invalido,
@@ -21,8 +21,11 @@ type DadosCep = Pick<Endereco, 'logradouro' | 'bairro' | 'cidade' | 'uf' | 'esta
 
 /**
  * Preenche logradouro, bairro, cidade, UF, estado, cepGeral e cepStatus a
- * partir do CEP de "endereco" (altera o objeto). Reaproveita os dados de um
- * CEP já validado no cadastro e só consulta o ViaCEP para CEPs desconhecidos.
+ * partir do CEP do endereço (altera o objeto). Reaproveita os dados de um
+ * CEP já validado no cadastro e só consulta o ViaCEP para CEPs novos.
+ * ViaCEP fora do ar gera um aviso e cepStatus X (o Save é barrado depois).
+ * @param req requisição que recebe o aviso
+ * @param endereco dados do endereço (cep normalizado para dígitos)
  */
 export async function preencherEnderecoPorCep(req: Request, endereco: Endereco): Promise<void> {
   const cep = somenteDigitos(endereco.cep)
@@ -51,9 +54,13 @@ export async function preencherEnderecoPorCep(req: Request, endereco: Endereco):
 }
 
 /**
- * Validações dos endereços enviados no Save do cliente (payload profundo):
- * CEP validado, logradouro/bairro para CEP geral, CEP único por cliente e
- * exatamente um endereço principal.
+ * Valida os endereços enviados no Save do cliente (payload profundo): CEP
+ * validado, logradouro/bairro obrigatórios para CEP geral e CEP único por
+ * cliente. Garante exatamente um endereço principal (o primeiro, se
+ * nenhum foi marcado). Endereço criado sem passar pelo rascunho (ex.:
+ * importação) tem o CEP consultado aqui.
+ * @param req requisição que recebe os erros
+ * @param enderecos endereços do cliente (alterados)
  */
 export async function validarEnderecosDoCliente(req: Request, enderecos: Endereco[] | null | undefined): Promise<void> {
   if (!Array.isArray(enderecos)) return

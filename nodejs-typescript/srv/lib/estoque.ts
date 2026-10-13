@@ -1,9 +1,8 @@
 /**
  * Movimentação de estoque: reserva, liberação e baixa.
  *
- * Equivale às actions internas ReservarEstoque / LiberarReserva / BaixarEstoque
- * do BO Item no RAP. Não são expostas em nenhum serviço: só o domínio de
- * pedidos chama estas funções, sempre dentro da transação da requisição.
+ * Não são expostas em nenhum serviço: só o domínio de pedidos chama estas
+ * funções, sempre dentro da transação da requisição.
  *
  * Concorrência: cada movimento é um UPDATE condicional e atômico ("só reserva
  * se o saldo disponível no banco ainda cobre a quantidade"). Se a condição não
@@ -15,11 +14,19 @@ import type { Request } from '@sap/cds'
 import { Itens } from '#cds-models/pedidoscompras'
 import { erro } from './mensagens.js'
 
+/**
+ * Tipos de movimento: reservar (registro/edição do pedido), liberar
+ * (cancelamento/edição) e baixar (aprovação do pedido).
+ */
 export const MOVIMENTO = Object.freeze({ reservar: 'reservar', liberar: 'liberar', baixar: 'baixar' } as const)
 export type Movimento = typeof MOVIMENTO[keyof typeof MOVIMENTO]
 
 /**
- * Aplica os movimentos e reporta os problemas em req (req.error).
+ * Aplica os movimentos item a item e reporta os problemas em req (req.error).
+ * Quando o banco recusa um movimento, o motivo é diagnosticado (item
+ * inexistente, inativo, saldo insuficiente ou reserva inconsistente).
+ * @param req requisição que recebe os erros
+ * @param tipo movimento a aplicar
  * @param quantidades item_ID -> quantidade
  * @returns true se todos os movimentos foram aplicados
  */

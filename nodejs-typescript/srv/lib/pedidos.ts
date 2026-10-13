@@ -1,11 +1,9 @@
 /**
  * Regras de domínio do pedido, compartilhadas pelos serviços de Pedidos e de
- * Reembolsos e pela importação por planilha.
- *
- * Porte da behavior pool ZBP_R_PC_PEDIDO: registro do pedido com reserva de
- * estoque (ReservarEstoqueRegistro/ValidarRegistro), edição dos itens com
- * reserva pela diferença (Activate), snapshots, cancelamento e as ações
- * internas chamadas pelo BO Reembolso (CancelarPorReembolso/RetomarPedido).
+ * Reembolsos e pela importação por planilha: registro do pedido com reserva
+ * de estoque, edição dos itens com reserva pela diferença, snapshots,
+ * cancelamento, gravação do pagamento e as operações acionadas pela decisão
+ * de reembolso (cancelarPorReembolso e retomarPedido).
  *
  * Todas as funções rodam na transação da requisição: se qualquer passo
  * reporta erro (req.error), o CAP desfaz tudo ao final do handler.
@@ -23,6 +21,7 @@ import { proximoNumeroPedido } from './numeracao.js'
 import type { PagamentoProcessado } from './pagamento-simulado.js'
 import { arredondar, formatarEndereco, somarQuantidades } from './util.js'
 
+/** Códigos de StatusPedido usados nas regras. */
 export const STATUS = Object.freeze({
   aberto: 'ABERTO',
   aguardandoAprovacao: 'AGUARDANDO_APROVACAO',
@@ -31,6 +30,7 @@ export const STATUS = Object.freeze({
   finalizado: 'FINALIZADO'
 } as const satisfies Record<string, StatusPedido_code>)
 
+/** Códigos de StatusPagamento usados nas regras. */
 export const STATUS_PAGAMENTO = Object.freeze({
   pendente: 'PENDENTE',
   aprovado: 'APROVADO',
@@ -38,6 +38,7 @@ export const STATUS_PAGAMENTO = Object.freeze({
   devolvido: 'DEVOLVIDO'
 } as const satisfies Record<string, StatusPagamento_code>)
 
+/** Moeda dos pedidos: itens em outra moeda não podem ser pedidos. */
 export const MOEDA_PADRAO = 'BRL'
 
 /** Campos do pedido mantidos só pelo backend (nunca vêm da UI). */
@@ -58,12 +59,18 @@ export interface EnderecoPrincipal {
 /** Item do estoque com os campos usados no registro e na edição. */
 type ItemEstoque = Pick<Item, 'ID' | 'sku' | 'itemAtivo' | 'precoUnitario' | 'currency_code' | 'qtdeEstoque' | 'qtdeReservada'>
 
-/** Remove do payload os campos que só o backend mantém. */
+/**
+ * Remove do payload os campos que só o backend mantém.
+ * @param pedido dados do pedido (alterados)
+ */
 export function removerCamposControlados(pedido: Pedido): void {
   for (const campo of CAMPOS_CONTROLADOS) delete pedido[campo]
 }
 
-/** Endereço principal atual do cliente: { ID, completo } ou null. */
+/**
+ * Endereço principal atual do cliente, com o texto completo formatado.
+ * @returns null se não houver cliente ou endereço principal
+ */
 export async function enderecoPrincipal(clienteID: string | null | undefined): Promise<EnderecoPrincipal | null> {
   if (!clienteID) return null
   const end = await SELECT.one.from(Enderecos)
@@ -72,19 +79,29 @@ export async function enderecoPrincipal(clienteID: string | null | undefined): P
   return end?.ID ? { ID: end.ID, completo: formatarEndereco(end) } : null
 }
 
-/** Quantidades já reservadas pelo pedido (itens gravados): Map item_ID -> qtde. */
+/**
+ * Quantidades já reservadas pelo pedido, lidas dos itens gravados (não do rascunho).
+ * @returns item_ID -> quantidade
+ */
 export async function reservaAtual(pedidoID: string): Promise<Map<string, number>> {
   const linhas = await SELECT.from(ItensPedido).columns('item_ID', 'qtdeItemPedido').where({ pedido_ID: pedidoID })
   return somarQuantidades(linhas)
 }
 
-/** Mensagem para uma ação não permitida no status atual (erro_status do RAP). */
+/**
+ * Registra a mensagem de ação não permitida no status atual do pedido
+ * (pedido finalizado, cancelado ou outro status).
+ */
 export function erroStatus(req: Request, pedido: Pick<Pedido, 'statusPedido_code'>): Error {
   if (pedido.statusPedido_code === STATUS.finalizado) return erro(req, 409, 'PEDIDO_FINALIZADO_IMUTAVEL')
   if (pedido.statusPedido_code === STATUS.cancelado) return erro(req, 409, 'PEDIDO_CANCELADO_IMUTAVEL')
   return erro(req, 409, 'PEDIDO_STATUS_INVALIDO', { status: pedido.statusPedido_code })
 }
 
+/**
+ * Itens do estoque por ID, com os campos usados no registro e na edição.
+ * @returns ID -> item
+ */
 async function carregarItens(ids: string[]): Promise<Map<string, ItemEstoque>> {
   if (!ids.length) return new Map()
   const linhas: ItemEstoque[] = await SELECT.from(Itens)
@@ -96,7 +113,11 @@ async function carregarItens(ids: string[]): Promise<Map<string, ItemEstoque>> {
 /** Saldo disponível (estoque - reservada) de um item. */
 const disponivel = (item: ItemEstoque): number => (item.qtdeEstoque ?? 0) - (item.qtdeReservada ?? 0)
 
-/** Cliente ativo e com endereço principal; devolve o endereço principal. */
+/**
+ * Confere que o cliente foi informado, existe, está ativo e tem endereço
+ * principal; registra o erro correspondente em req.
+ * @returns endereço principal, ou null
+ */
 async function validarCliente(req: Request, clienteID: string | null | undefined): Promise<EnderecoPrincipal | null> {
   if (!clienteID) {
     erro(req, 400, 'CAMPO_OBRIGATORIO', { campo: 'Cliente' }, 'cliente_ID')
@@ -113,9 +134,10 @@ async function validarCliente(req: Request, clienteID: string | null | undefined
 }
 
 /**
- * Registro do pedido (Save do rascunho novo ou criação direta/importação).
+ * Registro do pedido (Save do rascunho novo, criação direta ou importação).
  * Valida cliente, endereço, itens e disponibilidade; gera o número; fixa
  * preços e total; reserva o estoque. Altera req.data (payload profundo).
+ * @param req CREATE de Pedidos com os itens
  */
 export async function registrarPedido(req: Request<Pedido>): Promise<void> {
   const pedido = req.data
@@ -150,9 +172,11 @@ export async function registrarPedido(req: Request<Pedido>): Promise<void> {
 }
 
 /**
- * Save da edição de um pedido ABERTO (só os itens mudam). Reserva apenas o
- * acréscimo e libera o excedente, inclusive de itens removidos. Itens que já
- * estavam no pedido mantêm o preço fixado; itens novos pegam o preço atual.
+ * Save da edição de um pedido ABERTO (só os itens e a observação mudam).
+ * Reserva apenas o acréscimo e libera o excedente, inclusive de itens
+ * removidos. Itens que já estavam no pedido mantêm o preço fixado; itens
+ * novos pegam o preço atual.
+ * @param req UPDATE de Pedidos (payload profundo)
  */
 export async function atualizarPedidoAberto(req: Request<Pedido>, pedidoID: string): Promise<unknown> {
   const pedido = req.data
@@ -199,6 +223,14 @@ export async function atualizarPedidoAberto(req: Request<Pedido>, pedidoID: stri
   if (reservar.size || liberar.size) info(req, 'PEDIDO_ATUALIZADO', { numero: atual.numeroPedido })
 }
 
+/**
+ * Valida as linhas do pedido: item informado, item ativo, quantidade
+ * positiva e moeda padrão. Registra os erros em req.
+ * @param itens linhas do pedido
+ * @param estoque itens carregados por ID
+ * @param idsQueReservam itens que vão reservar estoque: só
+ *   eles são barrados quando inativos (um item já reservado pode ficar)
+ */
 function validarLinhas(req: Request, itens: ItemPedido[], estoque: Map<string, ItemEstoque>, idsQueReservam: Set<string>): void {
   for (const linha of itens) {
     const item = linha.item_ID ? estoque.get(linha.item_ID) : undefined
@@ -210,7 +242,13 @@ function validarLinhas(req: Request, itens: ItemPedido[], estoque: Map<string, I
   }
 }
 
-/** Fixa preço, moeda e total de cada linha; devolve o total do pedido. */
+/**
+ * Fixa preço, moeda e total de cada linha (altera as linhas).
+ * @param itens linhas do pedido
+ * @param estoque itens carregados por ID (preço atual)
+ * @param precosFixados item_ID -> preço já fixado no pedido
+ * @returns total do pedido
+ */
 function precificar(itens: ItemPedido[], estoque: Map<string, ItemEstoque>, precosFixados: Map<string, number>): number {
   let total = 0
   for (const linha of itens) {
@@ -224,7 +262,12 @@ function precificar(itens: ItemPedido[], estoque: Map<string, ItemEstoque>, prec
   return arredondar(total)
 }
 
-/** Snapshots imutáveis do cliente/endereço e dos itens (uma única vez). */
+/**
+ * Grava as cópias imutáveis do cliente/endereço e dos itens do pedido, para
+ * que o pedido encerrado não mude quando os cadastros mudarem. Só uma vez
+ * por pedido: se já houver snapshot, apenas informa.
+ * @param pedido pedido gravado (ID, cliente_ID, endereco_ID...)
+ */
 export async function criarSnapshots(req: Request, pedido: Pedido, motivo: MotivoSnapshot): Promise<void> {
   const existente = await SELECT.one.from(PedidosClienteSnapshots).columns('ID').where({ pedido_ID: pedido.ID })
   if (existente) {
@@ -287,7 +330,12 @@ export async function criarSnapshots(req: Request, pedido: Pedido, motivo: Motiv
   }))
 }
 
-/** Lê o pedido ativo (sem rascunho em andamento) para as ações do ciclo de vida. */
+/**
+ * Lê o pedido ativo para as ações do ciclo de vida. Recusa pedido
+ * inexistente ou com rascunho de edição aberto (a ação não pode concorrer
+ * com uma edição em andamento).
+ * @returns o pedido, ou null com o erro registrado
+ */
 export async function lerPedidoParaAcao(req: Request, pedidoID: string): Promise<Pedido | null> {
   const pedido = await SELECT.one.from(Pedidos, pedidoID)
   if (!pedido) {
@@ -301,14 +349,21 @@ export async function lerPedidoParaAcao(req: Request, pedidoID: string): Promise
   return pedido
 }
 
-/** Libera toda a reserva do pedido. */
+/**
+ * Libera toda a reserva de estoque do pedido.
+ * @returns true se toda a reserva foi liberada
+ */
 export async function liberarReservaDoPedido(req: Request, pedidoID: string): Promise<boolean> {
   return movimentarEstoque(req, MOVIMENTO.liberar, await reservaAtual(pedidoID))
 }
 
 /**
- * Cancelamento (action cancelarPedido). Com pagamento aprovado abre a
- * solicitação de reembolso em vez de cancelar direto (estoque segue reservado).
+ * Cancelamento (action cancelarPedido) de pedido ABERTO ou
+ * AGUARDANDO_APROVACAO, com motivo obrigatório. Sem pagamento aprovado:
+ * libera a reserva, gera os snapshots e cancela. Com pagamento aprovado:
+ * abre a solicitação de reembolso (o estoque segue reservado até a decisão).
+ * @param pedido pedido lido por lerPedidoParaAcao
+ * @param motivo motivo do cancelamento
  */
 export async function cancelarPedido(req: Request, pedido: Pedido, motivo: string | null | undefined): Promise<unknown> {
   if (pedido.statusPedido_code !== STATUS.aberto && pedido.statusPedido_code !== STATUS.aguardandoAprovacao) {
@@ -331,6 +386,11 @@ export async function cancelarPedido(req: Request, pedido: Pedido, motivo: strin
   info(req, 'PEDIDO_CANCELADO', { numero: pedido.numeroPedido })
 }
 
+/**
+ * Abre a solicitação de reembolso (PENDENTE) e põe o pedido em
+ * PROCESSANDO_REEMBOLSO, guardando o status anterior para o caso de rejeição.
+ * @param motivo motivo do cancelamento
+ */
 async function iniciarReembolso(req: Request, pedido: Pedido, motivo: string): Promise<void> {
   await INSERT.into(Reembolsos).entries({
     pedido_ID: pedido.ID,
@@ -352,8 +412,8 @@ async function iniciarReembolso(req: Request, pedido: Pedido, motivo: string): P
 }
 
 /**
- * Reembolso aprovado: libera a reserva, gera os snapshots, cancela o pedido e
- * devolve o pagamento (pedido e registro de pagamento).
+ * Reembolso aprovado: libera a reserva, gera os snapshots, cancela o pedido
+ * e marca o pagamento como devolvido (no pedido e no registro de pagamento).
  */
 export async function cancelarPorReembolso(req: Request, pedidoID: string): Promise<unknown> {
   const pedido = await SELECT.one.from(Pedidos, pedidoID)
@@ -372,7 +432,11 @@ export async function cancelarPorReembolso(req: Request, pedidoID: string): Prom
   return pedido
 }
 
-/** Reembolso rejeitado: o pedido volta ao status anterior e o motivo é limpo. */
+/**
+ * Reembolso rejeitado: o pedido volta ao status anterior à solicitação e o
+ * motivo do cancelamento é limpo.
+ * @param statusAnterior status guardado na solicitação
+ */
 export async function retomarPedido(req: Request, pedidoID: string, statusAnterior: string | null | undefined): Promise<unknown> {
   const pedido = await SELECT.one.from(Pedidos, pedidoID)
   if (!pedido || pedido.statusPedido_code !== STATUS.processandoReembolso) {
@@ -383,7 +447,12 @@ export async function retomarPedido(req: Request, pedidoID: string, statusAnteri
   return pedido
 }
 
-/** Grava o resultado seguro do pagamento (somente a última tentativa). */
+/**
+ * Grava o resultado seguro do pagamento, substituindo a tentativa anterior
+ * (só a última tentativa fica registrada). Nenhum dado sensível do cartão
+ * chega aqui.
+ * @param resultado resultado de simularPagamento com dadosValidos true
+ */
 export async function gravarPagamento(pedidoID: string, resultado: PagamentoProcessado): Promise<void> {
   await DELETE.from(Pagamentos).where({ pedido_ID: pedidoID })
   await INSERT.into(Pagamentos).entries({

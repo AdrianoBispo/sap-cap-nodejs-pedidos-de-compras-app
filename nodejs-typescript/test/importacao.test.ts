@@ -1,6 +1,5 @@
 /**
- * Importação em massa por planilha (equivalente às classes de teste de
- * ZCL_PC_IMPORTACAO do RAP): sucesso e "tudo ou nada" para as três apps.
+ * Importação em massa por planilha: sucesso e "tudo ou nada" para as três apps.
  */
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
@@ -67,6 +66,13 @@ describe('importação por planilha', () => {
 
     const repetido = await falha(importar('estoque', xlsx))
     assert.match(JSON.stringify(repetido), /já cadastrado/)
+
+    // O nome cadastrado é comparado sem diferenciar maiúsculas de minúsculas
+    const outraCaixa = gerarXlsx([
+      ['Nome', 'Categoria', 'Quantidade em estoque', 'Preço unitário'],
+      ['IMPORTADO CANETA', 'Escritório', 10, 1]
+    ]).toString('base64')
+    assert.match(JSON.stringify(await falha(importar('estoque', outraCaixa))), /IMPORTADO CANETA.{0,4} já cadastrado/)
   })
 
   it('pedidos: agrupa linhas pela referência, registra ABERTO e reserva o estoque', async () => {

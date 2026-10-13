@@ -1,5 +1,6 @@
 /**
- * Gestão de Reembolsos (equivalente a ltcl_reembolso do RAP).
+ * Gestão de Reembolsos: solicitação pelo cancelamento de pedido pago,
+ * aprovação e rejeição.
  */
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'

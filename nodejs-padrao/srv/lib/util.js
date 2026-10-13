@@ -1,22 +1,33 @@
 /**
- * Funções puras (sem acesso a banco) reutilizadas pelos serviços.
- * Porte de ZCL_PC_UTIL do projeto RAP.
+ * Funções puras (sem acesso a banco) reutilizadas pelos serviços: dígitos e
+ * formatação de CPF/CEP, validações simples, SKU, imagens e valores.
  */
 
+/** Saldo disponível até este valor (inclusive) é status ACABANDO. */
 export const LIMITE_ACABANDO = 10
 
+/** Tipos MIME aceitos nas fotos de cliente e de item. */
 export const MIME_IMAGEM = Object.freeze({
   jpeg: 'image/jpeg',
   png: 'image/png',
   webp: 'image/webp'
 })
 
-/** Remove tudo que não for dígito (CPF, CEP, telefone, cartão). */
+/**
+ * Remove tudo que não for dígito (CPF, CEP, telefone, cartão).
+ * @param {unknown} valor texto de entrada (null/undefined viram '')
+ * @returns {string} somente os dígitos
+ */
 export function somenteDigitos(valor) {
   return String(valor ?? '').replace(/\D/g, '')
 }
 
-/** Calcula os 2 dígitos verificadores para uma base de 9 dígitos. */
+/**
+ * Completa uma base de 9 dígitos com os 2 dígitos verificadores do CPF
+ * (módulo 11 com pesos decrescentes).
+ * @param {string|number} base9 nove primeiros dígitos do CPF
+ * @returns {string} CPF com 11 dígitos, ou '' se a base não tiver 9 dígitos
+ */
 export function calcularDvCpf(base9) {
   let cpf = somenteDigitos(base9)
   if (cpf.length !== 9) return ''
@@ -31,7 +42,11 @@ export function calcularDvCpf(base9) {
   return cpf
 }
 
-/** CPF válido: 11 dígitos, não repetidos e dígitos verificadores corretos. */
+/**
+ * CPF válido: 11 dígitos, não todos iguais e dígitos verificadores corretos.
+ * @param {unknown} cpf CPF com ou sem máscara
+ * @returns {boolean}
+ */
 export function validarCpf(cpf) {
   const digitos = somenteDigitos(cpf)
   if (digitos.length !== 11) return false
@@ -39,51 +54,97 @@ export function validarCpf(cpf) {
   return calcularDvCpf(digitos.slice(0, 9)) === digitos
 }
 
+/**
+ * Formata o CPF como 000.000.000-00.
+ * @param {unknown} cpf CPF com ou sem máscara
+ * @returns {string} CPF formatado, ou só os dígitos se não houver 11
+ */
 export function formatarCpf(cpf) {
   const d = somenteDigitos(cpf)
   return d.length === 11 ? `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}` : d
 }
 
+/**
+ * Formata o CEP como 00000-000.
+ * @param {unknown} cep CEP com ou sem máscara
+ * @returns {string} CEP formatado, ou só os dígitos se não houver 8
+ */
 export function formatarCep(cep) {
   const d = somenteDigitos(cep)
   return d.length === 8 ? `${d.slice(0, 5)}-${d.slice(5)}` : d
 }
 
+/**
+ * E-mail no formato usuario@dominio.tld, comparado em minúsculas (mesma
+ * expressão do @assert.format de Clientes.email em srv/validacoes.cds).
+ * @param {unknown} email
+ * @returns {boolean}
+ */
 export function validarEmail(email) {
   return /^[a-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/.test(String(email ?? '').trim().toLowerCase())
 }
 
+/**
+ * Telefone com DDD: 10 (fixo) ou 11 (celular) dígitos.
+ * @param {unknown} telefone com ou sem máscara
+ * @returns {boolean}
+ */
 export function validarTelefone(telefone) {
   const d = somenteDigitos(telefone)
   return d.length >= 10 && d.length <= 11
 }
 
-/** SEM_ESTOQUE (0), ACABANDO (1-10) ou EM_ESTOQUE (>= 11). */
+/**
+ * Status do estoque pelo saldo disponível: SEM_ESTOQUE (<= 0), ACABANDO
+ * (1 a 10) ou EM_ESTOQUE (>= 11). Mesma regra da coluna calculada
+ * Itens.statusEstoque_code (db/schema.cds).
+ * @param {number} qtdeDisponivel qtdeEstoque - qtdeReservada
+ * @returns {'SEM_ESTOQUE'|'ACABANDO'|'EM_ESTOQUE'}
+ */
 export function calcularStatusEstoque(qtdeDisponivel) {
   if (qtdeDisponivel <= 0) return 'SEM_ESTOQUE'
   if (qtdeDisponivel <= LIMITE_ACABANDO) return 'ACABANDO'
   return 'EM_ESTOQUE'
 }
 
-/** "Logradouro, Número - Complemento - Bairro - Cidade/UF - CEP 00000-000". */
+/**
+ * Texto do endereço: "Logradouro, Número - Complemento - Bairro - Cidade/UF - CEP 00000-000".
+ * O complemento só aparece quando informado.
+ * @param {{logradouro?:string, numero?:string, complemento?:string, bairro?:string, cidade?:string, uf?:string, cep?:string}} endereco
+ * @returns {string}
+ */
 export function formatarEndereco({ logradouro, numero, complemento, bairro, cidade, uf, cep }) {
   const comp = complemento?.trim() ? ` - ${complemento.trim()}` : ''
   return `${logradouro ?? ''}, ${numero ?? ''}${comp} - ${bairro ?? ''} - ${cidade ?? ''}/${uf ?? ''} - CEP ${formatarCep(cep)}`
 }
 
-/** Prefixo de 3 letras do SKU a partir do código da categoria (completado com X). */
+/**
+ * Prefixo de 3 letras do SKU a partir do código da categoria (completado com X).
+ * @param {unknown} categoria código da categoria (ex.: ELETRONICOS -> ELE)
+ * @returns {string}
+ */
 export function prefixoCategoria(categoria) {
   return String(categoria ?? '').trim().toUpperCase().padEnd(3, 'X').slice(0, 3)
 }
 
-/** SKU no formato SKU-<prefixo>-<10 dígitos>, ex.: SKU-ELE-0000000042. */
+/**
+ * Monta o SKU no formato SKU-<prefixo>-<10 dígitos>, ex.: SKU-ELE-0000000042.
+ * @param {string} categoria código da categoria
+ * @param {number} sequencial número sequencial do SKU
+ * @returns {string}
+ */
 export function montarSku(categoria, sequencial) {
   return `SKU-${prefixoCategoria(categoria)}-${String(sequencial).padStart(10, '0')}`
 }
 
 /**
- * Aceita somente JPEG, PNG ou WEBP: MIME type, extensão e assinatura binária.
- * Conteúdo vazio é válido (foto opcional).
+ * Aceita somente JPEG, PNG ou WEBP, conferindo o MIME type, a extensão do
+ * arquivo (quando informada) e a assinatura binária do conteúdo.
+ * Conteúdo vazio é válido (a foto é opcional).
+ * @param {Uint8Array|null|undefined} conteudo bytes da imagem
+ * @param {unknown} mimeType tipo informado no upload
+ * @param {unknown} nomeArquivo nome do arquivo enviado
+ * @returns {boolean}
  */
 export function validarImagem(conteudo, mimeType, nomeArquivo) {
   if (!conteudo || conteudo.length === 0) return true
@@ -102,12 +163,21 @@ export function validarImagem(conteudo, mimeType, nomeArquivo) {
   }
 }
 
-/** Arredonda valores monetários para 2 casas. */
+/**
+ * Arredonda valores monetários para 2 casas (Number.EPSILON corrige casos
+ * como 1.005, que em ponto flutuante fica um pouco abaixo de 1.005).
+ * @param {unknown} valor
+ * @returns {number}
+ */
 export function arredondar(valor) {
   return Math.round((Number(valor) + Number.EPSILON) * 100) / 100
 }
 
-/** Soma as quantidades por item: [{ item_ID, qtdeItemPedido }] -> Map(item_ID -> qtde). */
+/**
+ * Soma as quantidades por item; linhas sem item são ignoradas.
+ * @param {{item_ID?:string|null, qtdeItemPedido?:number|null}[]|null|undefined} itens linhas do pedido
+ * @returns {Map<string, number>} item_ID -> quantidade total
+ */
 export function somarQuantidades(itens) {
   const totais = new Map()
   for (const { item_ID, qtdeItemPedido } of itens ?? []) {

@@ -150,7 +150,7 @@
                   "actions": {
                     "importarPlanilha": {
                       "press": "gestaoestoque.ext.ImportarPlanilha.abrir",
-                      "visible": true,
+                      "visible": "{= %{/Permissoes/somenteLeitura} === false}",
                       "enabled": true,
                       "requiresSelection": false,
                       "text": "{i18n>importarPlanilha}"

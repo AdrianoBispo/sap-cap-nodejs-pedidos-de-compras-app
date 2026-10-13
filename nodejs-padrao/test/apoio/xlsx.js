@@ -4,16 +4,25 @@
  */
 import { crc32, deflateRawSync } from 'node:zlib'
 
+/** Escapa &, < e > para o XML. */
 function escapar(texto) {
   return String(texto).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
+/** Índice da coluna -> letras da referência (0 -> A, 26 -> AA). */
 function coluna(idx) {
   let nome = ''
   for (let n = idx + 1; n > 0; n = Math.floor((n - 1) / 26)) nome = String.fromCharCode(65 + ((n - 1) % 26)) + nome
   return nome
 }
 
+/**
+ * Gera um .xlsx com uma aba a partir das linhas (a primeira é o cabeçalho).
+ * Números viram células numéricas; textos, compartilhados ou inline.
+ * @param {(string|number)[][]} linhas
+ * @param {{inline?:boolean}} [opcoes] inline: textos como inlineStr
+ * @returns {Buffer}
+ */
 export function gerarXlsx(linhas, { inline = false } = {}) {
   const compartilhados = []
   const indice = new Map()
@@ -40,7 +49,12 @@ export function gerarXlsx(linhas, { inline = false } = {}) {
   return zipar(arquivos)
 }
 
-function zipar(arquivos) {
+/**
+ * Monta um ZIP (deflate) com os arquivos de texto informados.
+ * @param {Record<string, string>} arquivos caminho -> conteúdo
+ * @returns {Buffer}
+ */
+export function zipar(arquivos) {
   const locais = []
   const centrais = []
   let deslocamento = 0

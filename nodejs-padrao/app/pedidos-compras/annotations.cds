@@ -1,6 +1,5 @@
 /*
- * UI da aplicação Pedidos de Compras (porte de ZC_PC_PEDIDO_APP.ddlx e das
- * metadata extensions dos itens, pagamento e snapshots).
+ * UI da aplicação Pedidos de Compras: pedido, itens, pagamento e snapshots.
  *
  * Object Page dinâmica: Dados do Cliente e Itens existem em duas versões com
  * o mesmo título; pedido FINALIZADO/CANCELADO mostra os snapshots, os demais

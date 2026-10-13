@@ -1,3 +1,4 @@
+/* Formatação dos valores das medidas no idioma da sessão. */
 sap.ui.define(["sap/ui/core/format/NumberFormat"], function (NumberFormat) {
     "use strict";
 
@@ -6,6 +7,10 @@ sap.ui.define(["sap/ui/core/format/NumberFormat"], function (NumberFormat) {
     /**
      * Formata o valor de uma medida conforme o tipo (int | dec | money) no idioma da sessão.
      * Instâncias criadas a cada chamada: o locale pode mudar entre sessões e o custo é baixo.
+     * @param {number} fValue
+     * @param {string} sKind int | dec | money
+     * @param {string} [sCurrency] moeda (padrão BRL)
+     * @returns {string} "-" para valor ausente
      */
     function formatMeasure(fValue, sKind, sCurrency) {
         if (fValue === null || fValue === undefined || isNaN(fValue)) {
@@ -21,7 +26,12 @@ sap.ui.define(["sap/ui/core/format/NumberFormat"], function (NumberFormat) {
         }
     }
 
-    /** Participação no total, em % (0 quando o total é zero). */
+    /**
+     * Participação no total, em % com uma casa (0 quando o total é zero).
+     * @param {number} fValue
+     * @param {number} fTotal
+     * @returns {string}
+     */
     function formatShare(fValue, fTotal) {
         var fShare = fTotal ? fValue / fTotal : 0;
         return NumberFormat.getPercentInstance({ minFractionDigits: 1, maxFractionDigits: 1 }).format(fShare);

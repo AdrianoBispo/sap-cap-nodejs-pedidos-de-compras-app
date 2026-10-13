@@ -20,6 +20,11 @@ sap.ui.define([
 
     var VIZ_TYPE = { column: "column", bar: "bar", line: "line", donut: "donut" };
 
+    /**
+     * Máscara do ChartFormatter para os rótulos: inteiro ou decimal curto (ex.: 1,2 mil).
+     * @param {string} sKind int | dec | money
+     * @returns {string}
+     */
     function formatPattern(sKind) {
         return sKind === "int" ? PATTERN.STANDARDINTEGER : PATTERN.SHORTFLOAT_MFD2;
     }
@@ -45,6 +50,11 @@ sap.ui.define([
 
         renderer: {
             apiVersion: 2,
+            /**
+             * Desenha o VizFrame ou, sem linhas, o texto de "sem dados".
+             * @param {sap.ui.core.RenderManager} oRm
+             * @param {analiseestoque.control.AnalysisChart} oControl
+             */
             render: function (oRm, oControl) {
                 var bEmpty = !oControl.getRows().length;
                 oRm.openStart("div", oControl).class("pcAnalysisChart").style("height", oControl.getHeight()).openEnd();
@@ -58,12 +68,17 @@ sap.ui.define([
             }
         },
 
+        /** Reconfigura o gráfico a cada renderização com as linhas atuais. */
         onBeforeRendering: function () {
             if (this.getRows().length) {
                 this._configure();
             }
         },
 
+        /**
+         * VizFrame interno, criado na primeira utilização.
+         * @returns {sap.viz.ui5.controls.VizFrame}
+         */
         _getViz: function () {
             var oViz = this.getAggregation("_viz");
             if (!oViz) {
@@ -77,6 +92,10 @@ sap.ui.define([
             return oViz;
         },
 
+        /**
+         * Configura dataset, feeds e propriedades do VizFrame a partir de
+         * chartType, measures e rows. A rosca usa só a primeira medida.
+         */
         _configure: function () {
             var oViz = this._getViz();
             var aMeasures = this.getMeasures();

@@ -1,7 +1,7 @@
 using {pedidoscompras as db} from '../db/schema';
 
 /**
- * Aplicação Gestão de Reembolsos (equivalente ao serviço ZUI_PC_REEMBOLSOS).
+ * Aplicação Gestão de Reembolsos.
  * As solicitações são criadas pelo cancelamento de pedidos com pagamento
  * aprovado; aqui só são consultadas e decididas.
  */

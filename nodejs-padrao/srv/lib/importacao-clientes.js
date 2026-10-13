@@ -10,11 +10,12 @@ import {
   normalizarCpf, normalizarCep, converterCodelist, opcoesCodelist,
   falharImportacao, concluirImportacao, textosDoErro
 } from './importacao.js'
-import { validarCpf, validarEmail, somenteDigitos, formatarCpf } from './util.js'
+import { validarCpf, validarEmail, validarTelefone, somenteDigitos, formatarCpf } from './util.js'
 import { lerConteudo } from './requisicao.js'
 
 const { SELECT, INSERT } = cds.ql
 
+/** Colunas aceitas na planilha: nome do campo, sinônimos do cabeçalho e obrigatoriedade. */
 const COLUNAS = [
   { campo: 'CPF', obrigatoria: true },
   { campo: 'Nome', sinonimos: ['NOMECOMPLETO', 'NOMEDOCLIENTE'], obrigatoria: true },
@@ -27,6 +28,18 @@ const COLUNAS = [
   { campo: 'Complemento' }
 ]
 
+/**
+ * Action importarPlanilha do ClientesService.
+ *  1. Lê a planilha e valida todas as linhas sem gravar nada (CPF, nome,
+ *     e-mail, telefone, gênero, nascimento, CEP e número; CPF repetido no
+ *     arquivo ou já cadastrado).
+ *  2. Havendo qualquer erro, falha a importação inteira com a lista de erros.
+ *  3. Senão cria cada cliente pelo próprio serviço, com o endereço principal;
+ *     um erro dos handlers (ex.: CEP inexistente) também desfaz tudo.
+ * @param {import('@sap/cds').Request} req requisição da action (arquivo em base64)
+ * @param {import('@sap/cds').Service} srv ClientesService
+ * @returns {Promise<{registrosCriados:number, mensagem:string}|undefined>} undefined quando a importação falha
+ */
 export async function importarClientes(req, srv) {
   const db = cds.entities('pedidoscompras')
   const { registros, erros } = lerPlanilha(await lerConteudo(req.data.arquivo), COLUNAS)
@@ -58,7 +71,7 @@ export async function importarClientes(req, srv) {
     else if (cliente.email.length > 100) erros.push(`${pref}E-mail excede 100 caracteres.`)
 
     cliente.telefone = somenteDigitos(valor(reg, 'Telefone'))
-    if (cliente.telefone.length < 10 || cliente.telefone.length > 11) {
+    if (!validarTelefone(cliente.telefone)) {
       erros.push(`${pref}Telefone deve ter 10 ou 11 dígitos (DDD + número).`)
     }
 

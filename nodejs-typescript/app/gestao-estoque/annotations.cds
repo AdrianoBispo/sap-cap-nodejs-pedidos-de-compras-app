@@ -1,5 +1,5 @@
 /*
- * UI da aplicação Gestão de Estoque (porte de ZC_PC_ITEM_APP.ddlx).
+ * UI da aplicação Gestão de Estoque: List Report e Object Page dos itens.
  */
 using EstoqueService as service from '../../srv/estoque-service';
 
@@ -157,3 +157,12 @@ annotate service.Itens with @(
     ]
   };
 };
+
+// Usuário só de consulta (não Admin): sem Criar, Editar e Excluir. O singleton
+// Permissoes traz somenteLeitura calculado pelos papéis do usuário logado; o
+// @restrict do serviço continua barrando a alteração no backend.
+annotate service.Itens with @(
+  UI.CreateHidden: {$edmJson: {$Path: '/EstoqueService.EntityContainer/Permissoes/somenteLeitura'}},
+  UI.UpdateHidden: {$edmJson: {$Path: '/EstoqueService.EntityContainer/Permissoes/somenteLeitura'}},
+  UI.DeleteHidden: {$edmJson: {$Path: '/EstoqueService.EntityContainer/Permissoes/somenteLeitura'}}
+);

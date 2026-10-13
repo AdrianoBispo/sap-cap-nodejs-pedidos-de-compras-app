@@ -16,6 +16,7 @@ interface EnderecoViaCep {
   estado: string
 }
 
+/** CEPs conhecidos pelo ViaCEP falso e o endereço devolvido. */
 export const CEPS: Record<string, EnderecoViaCep> = {
   '01001000': { logradouro: 'Praça da Sé', bairro: 'Sé', localidade: 'São Paulo', uf: 'SP', estado: 'São Paulo' },
   '70040010': { logradouro: 'Esplanada dos Ministérios', bairro: 'Zona Cívico-Administrativa', localidade: 'Brasília', uf: 'DF', estado: 'Distrito Federal' },
@@ -33,6 +34,11 @@ export interface ViaCepFalso {
   fechar(): Promise<void>
 }
 
+/**
+ * Sobe o ViaCEP falso numa porta livre de 127.0.0.1.
+ * @returns url base,
+ *   número de chamadas recebidas e função para encerrar o servidor
+ */
 export async function iniciarViaCepFalso(): Promise<ViaCepFalso> {
   let chamadas = 0
   const servidor = createServer((req, res) => {

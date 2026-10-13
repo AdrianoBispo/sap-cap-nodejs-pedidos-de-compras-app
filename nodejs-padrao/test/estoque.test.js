@@ -1,7 +1,6 @@
 /**
  * Gestão de Estoque: SKU, disponibilidade e status calculados, inativação e
- * exclusão controladas (equivalente a ltcl_sku_item e aos testes de status
- * de estoque do RAP).
+ * exclusão controladas.
  */
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
@@ -107,5 +106,12 @@ describe('Gestão de Estoque', () => {
     const { data } = await api.get(`${E}/Itens?$top=1`, COMUM)
     assert.equal(data.value.length, 1)
     assert.equal((await falha(api.post(`${E}/Itens`, {}, COMUM))).status, 403)
+  })
+
+  it('a UI só oferece alteração ao Admin: Permissoes.somenteLeitura por usuário', async () => {
+    const { data: admin } = await api.get(`${E}/Permissoes`)
+    assert.equal(admin.somenteLeitura, false)
+    const { data: comum } = await api.get(`${E}/Permissoes`, COMUM)
+    assert.equal(comum.somenteLeitura, true)
   })
 })

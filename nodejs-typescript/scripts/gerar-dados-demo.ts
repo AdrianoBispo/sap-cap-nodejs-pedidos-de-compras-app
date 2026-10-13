@@ -1,9 +1,8 @@
 /**
  * Gera os arquivos CSV de db/data com as CodeLists e a massa de demonstração.
  *
- * Porte das classes ZCL_PC_SETUP (CodeLists), ZCL_SETUP_CLIENTE, ZCL_SETUP_ESTOQUE
- * e ZCL_SETUP_PEDIDOS do projeto RAP: 100 clientes (cada um com endereço
- * principal), 100 itens e 100 pedidos em todos os status, com reservas, baixas,
+ * Conteúdo: as CodeLists, 100 clientes (cada um com endereço principal),
+ * 100 itens e 100 pedidos em todos os status, com reservas, baixas,
  * pagamentos, snapshots e solicitações de reembolso coerentes com o estoque.
  *
  * Os dados são determinísticos (UUIDs derivados de um hash), então rodar o
@@ -75,13 +74,16 @@ interface Item {
 // Utilitários
 // ---------------------------------------------------------------------------
 
-/** UUID v4 determinístico a partir de um texto. */
+/**
+ * UUID v4 determinístico a partir de um texto (hash SHA-256), para que os
+ * CSVs gerados sejam sempre os mesmos.
+ */
 function uuid(texto: string): string {
   const h = createHash('sha1').update(texto).digest('hex')
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-a${h.slice(17, 20)}-${h.slice(20, 32)}`
 }
 
-/** Dígitos verificadores de CPF para uma base de 9 dígitos (calcular_dv_cpf). */
+/** CPF válido a partir de uma base de 9 dígitos (completa os dígitos verificadores). */
 function cpfComDigitos(base9: number): string {
   let cpf = String(base9)
   for (let rodada = 0; rodada < 2; rodada++) {
@@ -95,25 +97,38 @@ function cpfComDigitos(base9: number): string {
   return cpf
 }
 
+/** Remove os acentos (usado para montar os e-mails). */
 function semAcento(texto: string): string {
   return texto.normalize('NFD').replace(/[̀-ͯ]/g, '')
 }
 
+/** Texto do endereço, no mesmo formato de srv/lib/util (formatarEndereco). */
 function formatarEndereco({ logradouro, numero, complemento, bairro, cidade, uf, cep }: Endereco): string {
   const comp = complemento ? ` - ${complemento}` : ''
   return `${logradouro}, ${numero}${comp} - ${bairro} - ${cidade}/${uf} - CEP ${cep.slice(0, 5)}-${cep.slice(5)}`
 }
 
+/**
+ * Data/hora ISO relativa à data de referência do script.
+ * @param dias dias antes de AGORA
+ * @param horas horas a somar
+ */
 function diasAtras(dias: number, horas = 0): string {
   return new Date(AGORA.getTime() - (dias * 24 + horas) * 3600 * 1000).toISOString()
 }
 
+/** Valor de célula CSV: vazio para null/undefined, entre aspas quando contém ";", aspas ou quebra de linha. */
 function csv(valor: Linha[string]): string {
   if (valor === null || valor === undefined) return ''
   const texto = String(valor)
   return /[;"\n]/.test(texto) ? `"${texto.replace(/"/g, '""')}"` : texto
 }
 
+/**
+ * Grava db/data/pedidoscompras-<entidade>.csv (separador ";"), com as
+ * colunas tiradas da primeira linha.
+ * @param entidade nome da entidade (ex.: Clientes)
+ */
 function gravar(entidade: string, linhas: object[]): void {
   const colunas = Object.keys(linhas[0])
   const conteudo = [colunas.join(';'), ...(linhas as Linha[]).map(l => colunas.map(c => csv(l[c])).join(';'))].join('\n')
@@ -121,10 +136,11 @@ function gravar(entidade: string, linhas: object[]): void {
   console.log(`${entidade}.csv: ${linhas.length} linha(s)`)
 }
 
+/** Campos administrativos (aspect managed) das linhas geradas. */
 const admin = () => ({ createdAt: AGORA.toISOString(), createdBy: USUARIO, modifiedAt: AGORA.toISOString(), modifiedBy: USUARIO })
 
 // ---------------------------------------------------------------------------
-// CodeLists (ZCL_PC_SETUP->carregar_codelists)
+// CodeLists
 // ---------------------------------------------------------------------------
 
 const codelists: Record<string, ValorCodeList[]> = {
@@ -149,7 +165,7 @@ const codelists: Record<string, ValorCodeList[]> = {
 }
 
 // ---------------------------------------------------------------------------
-// Clientes (ZCL_SETUP_CLIENTE)
+// Clientes
 // ---------------------------------------------------------------------------
 
 const nomes: [nome: string, genero: string][] = [
@@ -207,7 +223,7 @@ for (let i = 1; i <= 100; i++) {
 }
 
 // ---------------------------------------------------------------------------
-// Itens de estoque (ZCL_SETUP_ESTOQUE)
+// Itens de estoque
 // ---------------------------------------------------------------------------
 
 const bases: [nome: string, descricao: string, categoria: string, preco: number][] = [
@@ -261,7 +277,7 @@ for (let i = 0; i < 100; i++) {
 }
 
 // ---------------------------------------------------------------------------
-// Pedidos (ZCL_SETUP_PEDIDOS)
+// Pedidos
 // ---------------------------------------------------------------------------
 
 const padrao = [

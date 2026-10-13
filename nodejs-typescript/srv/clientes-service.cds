@@ -1,8 +1,11 @@
 using {pedidoscompras as db} from '../db/schema';
-using {pedidoscompras.ResultadoImportacao} from './common';
+using {
+  pedidoscompras.ResultadoImportacao,
+  pedidoscompras.Permissoes as AspectoPermissoes
+} from './common';
 
 /**
- * Aplicação Gestão de Clientes (equivalente ao serviço ZUI_PC_CLIENTES).
+ * Aplicação Gestão de Clientes.
  * Clientes e endereços com rascunho; apenas administradores alteram.
  */
 @path    : 'clientes'
@@ -50,8 +53,8 @@ service ClientesService {
   entity Generos         as projection on db.Generos;
 
   /**
-   * CEPs já validados no cadastro (um registro por CEP, sem CEP geral), como
-   * a value help ZC_PC_CEP_VH: escolher um deles evita nova chamada ao ViaCEP.
+   * CEPs já validados no cadastro (um registro por CEP, sem CEP geral), usados
+   * como value help do CEP: escolher um deles evita nova chamada ao ViaCEP.
    */
   @readonly
   entity CepsCadastrados as
@@ -69,6 +72,12 @@ service ClientesService {
       and cepGeral  = false
     group by
       cep;
+
+  /** Permissões do usuário logado (calculadas no handler a partir dos papéis). */
+  @odata.singleton
+  @readonly
+  @cds.persistence.skip
+  entity Permissoes : AspectoPermissoes {}
 
   /**
    * Importação em massa por planilha (.xlsx ou .csv): um cliente por linha,

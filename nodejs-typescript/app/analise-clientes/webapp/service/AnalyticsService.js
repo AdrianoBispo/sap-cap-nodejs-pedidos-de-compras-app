@@ -10,8 +10,14 @@ sap.ui.define([
 ], function (BaseObject, Filter, AnalyticsQuery) {
     "use strict";
 
+    /** Máximo de linhas lidas por consulta. */
     var MAX_ROWS = 1000;
 
+    /**
+     * Condição -> sap.ui.model.Filter (vários valores do mesmo campo viram OR).
+     * @param {{path: string, operator: string, values: any[]}} oCondition
+     * @returns {sap.ui.model.Filter}
+     */
     function toFilter(oCondition) {
         var aFilters = oCondition.values.map(function (vValue) {
             return new Filter(oCondition.path, oCondition.operator, vValue);
@@ -31,6 +37,12 @@ sap.ui.define([
             this._filterValues = {};
         },
 
+        /**
+         * Executa uma consulta: ODataListBinding com $$aggregation e filtros, lido
+         * uma vez com requestContexts e destruído em seguida.
+         * @param {{entitySet: string, aggregation: object, filters: object[]}} oQuery
+         * @returns {Promise<object[]>} linhas devolvidas pelo serviço
+         */
         _read: function (oQuery) {
             var aFilters = oQuery.filters.map(toFilter);
             var oBinding = this._model.bindList("/" + oQuery.entitySet, null, [], aFilters, {
@@ -43,7 +55,12 @@ sap.ui.define([
             });
         },
 
-        /** Linhas de um cenário (dimensão x medidas), já ordenadas e limitadas. */
+        /**
+         * Linhas de um cenário (dimensão x medidas), já ordenadas e limitadas.
+         * @param {object} oScenario
+         * @param {object} mFilterValues
+         * @returns {Promise<object[]>}
+         */
         loadScenario: function (oScenario, mFilterValues) {
             var oQuery = AnalyticsQuery.buildScenarioQuery(oScenario, mFilterValues);
             return this._read(oQuery).then(function (aRows) {
@@ -51,14 +68,25 @@ sap.ui.define([
             }.bind(this));
         },
 
-        /** Totais do domínio para os tiles de KPI. */
+        /**
+         * Totais do domínio para os tiles de KPI.
+         * @param {object} oDomain
+         * @param {object} mFilterValues
+         * @returns {Promise<{values: object, currency: string}>}
+         */
         loadKpis: function (oDomain, mFilterValues) {
             return this._read(AnalyticsQuery.buildKpiQuery(oDomain, mFilterValues)).then(function (aRows) {
                 return AnalyticsQuery.shapeKpis(oDomain, aRows);
             });
         },
 
-        /** Opções de um filtro "list" (valores distintos, com cache por campo). */
+        /**
+         * Opções de um filtro "list" (valores distintos), com cache por campo; uma
+         * falha remove a entrada do cache para tentar de novo depois.
+         * @param {object} oDomain
+         * @param {object} oFilterDef
+         * @returns {Promise<{key:string,text:string}[]>}
+         */
         loadFilterValues: function (oDomain, oFilterDef) {
             var sKey = oDomain.key + "/" + oFilterDef.field;
             if (!this._filterValues[sKey]) {

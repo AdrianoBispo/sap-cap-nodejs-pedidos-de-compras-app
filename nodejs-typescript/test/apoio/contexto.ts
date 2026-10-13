@@ -31,9 +31,12 @@ export interface Falha {
   codes: string[]
 }
 
+/** Credenciais do usuário administrador (papel Admin). */
 export const ADMIN: Opcoes = { auth: { username: 'admin', password: 'admin' } }
+/** Credenciais do usuário comum (papel Comum: só consulta cadastros). */
 export const COMUM: Opcoes = { auth: { username: 'comum', password: 'comum' } }
 
+/** Nome do serviço CDS por caminho OData (prefixo das actions de rascunho). */
 const SERVICOS: Record<string, string> = {
   '/odata/v4/clientes': 'ClientesService',
   '/odata/v4/estoque': 'EstoqueService',
@@ -50,6 +53,11 @@ interface ClienteHttp {
   delete(url: string, opcoes?: Opcoes): Promise<Resposta>
 }
 
+/**
+ * Sobe o servidor CAP do projeto (cds.test) apontando o ViaCEP para o
+ * servidor falso. Devolve atalhos HTTP autenticados (ADMIN por padrão) e
+ * do fluxo de rascunho (ativar, editar).
+ */
 export function iniciarServidor() {
   const teste = cds.test(join(import.meta.dirname, '..', '..')) as unknown as ClienteHttp
   const viacep = {} as ViaCepFalso
@@ -99,7 +107,10 @@ interface CorpoErro {
   details?: { code?: string, message?: string }[]
 }
 
-/** Captura o erro de uma chamada que deve falhar: { status, message, details }. */
+/**
+ * Aguarda uma chamada que deve falhar e devolve o erro normalizado:
+ * { status, message, details, codes }. Lança se a chamada tiver sucesso.
+ */
 export async function falha(promessa: Promise<unknown>): Promise<Falha> {
   try {
     await promessa

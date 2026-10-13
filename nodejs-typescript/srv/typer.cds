@@ -21,3 +21,5 @@ annotate PedidosService.ClientesAtivos with @singular: 'ClienteAtivo';
 annotate PedidosService.ItensAtivos with @singular: 'ItemAtivo';
 annotate PedidosService.ItensPedido with @singular: 'ItemPedido';
 annotate PedidosService.Itens with @singular: 'Item';
+annotate ClientesService.Permissoes with @singular: 'Permissao';
+annotate EstoqueService.Permissoes with @singular: 'Permissao';

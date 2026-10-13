@@ -1,3 +1,8 @@
+/*
+ * Componente do app de análise: cria o modelo "state" (domínio e filtros
+ * compartilhados entre o painel e o detalhe) e o AnalyticsService sobre o
+ * modelo OData V4 do AnaliticoService.
+ */
 sap.ui.define([
     "sap/ui/core/UIComponent",
     "sap/ui/model/json/JSONModel",
@@ -13,6 +18,7 @@ sap.ui.define([
             interfaces: ["sap.ui.core.IAsyncContentCreation"]
         },
 
+        /** Inicializa o estado compartilhado, o serviço de consultas e o roteador. */
         init: function () {
             UIComponent.prototype.init.apply(this, arguments);
 
@@ -30,10 +36,15 @@ sap.ui.define([
             this.getRouter().initialize();
         },
 
+        /**
+         * Serviço de consultas analíticas do app.
+         * @returns {analisepedidos.service.AnalyticsService}
+         */
         getService: function () {
             return this._service;
         },
 
+        /** Libera o serviço de consultas junto com o componente. */
         destroy: function () {
             this._service.destroy();
             UIComponent.prototype.destroy.apply(this, arguments);

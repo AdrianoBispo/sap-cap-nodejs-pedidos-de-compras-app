@@ -1,6 +1,6 @@
 /**
- * Ciclo de vida do pedido (equivalente às classes ltcl_registro_pedido,
- * ltcl_edicao_pedido e ltcl_ciclo_pedido do RAP).
+ * Ciclo de vida do pedido: registro com reserva de estoque, edição dos itens,
+ * pagamento, aprovação e cancelamento.
  */
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
@@ -276,8 +276,18 @@ describe('Pedidos de Compras', () => {
       await api.editar(P, 'Pedidos', pedido.ID)
       const emEdicao = await falha(acao(pedido.ID, 'efetuarPagamento', CARTAO_OK))
       assert.match(emEdicao.message, /em edição/)
-      const noRascunho = await falha(api.post(`${P}/Pedidos${api.chave(pedido.ID, false)}/PedidosService.efetuarPagamento`, CARTAO_OK))
-      assert.ok(noRascunho.status >= 400)
+      // No rascunho a action chega ao handler (não 501 "no handler") e é recusada
+      const naoRascunho = (nome: string, dados: object) =>
+        falha(api.post(`${P}/Pedidos${api.chave(pedido.ID, false)}/PedidosService.${nome}`, dados))
+      for (const [nome, dados] of [
+        ['efetuarPagamento', CARTAO_OK],
+        ['aprovarPedido', {}],
+        ['cancelarPedido', { motivoCancelamento: 'Teste' }]
+      ] as const) {
+        const noRascunho = await naoRascunho(nome, dados)
+        assert.equal(noRascunho.status, 409, nome)
+        assert.match(noRascunho.message, /pedido salvo/, nome)
+      }
     })
   })
   describe('campos somente leitura (só o cliente e os itens são informados)', () => {

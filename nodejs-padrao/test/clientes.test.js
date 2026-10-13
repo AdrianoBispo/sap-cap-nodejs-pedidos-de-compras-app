@@ -1,7 +1,6 @@
 /**
  * Gestão de Clientes: rascunho, CPF, endereços com ViaCEP, endereço principal,
- * autorização e exclusão (equivalente a ltcl_persistencia_endereco e aos
- * testes de CPF/e-mail/telefone do RAP).
+ * validações de CPF, e-mail e telefone, autorização e exclusão.
  */
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
@@ -122,6 +121,13 @@ describe('Gestão de Clientes', () => {
     assert.equal(data.value.length, 1)
     assert.equal((await falha(api.post(`${C}/Clientes`, {}, COMUM))).status, 403)
     assert.equal((await falha(api.post(`${C}/Clientes${api.chave(data.value[0].ID)}/ClientesService.draftEdit`, {}, COMUM))).status, 403)
+  })
+
+  it('a UI só oferece alteração ao Admin: Permissoes.somenteLeitura por usuário', async () => {
+    const { data: admin } = await api.get(`${C}/Permissoes`)
+    assert.equal(admin.somenteLeitura, false)
+    const { data: comum } = await api.get(`${C}/Permissoes`, COMUM)
+    assert.equal(comum.somenteLeitura, true)
   })
 
   it('cliente com pedido não pode ser excluído; sem pedido pode', async () => {

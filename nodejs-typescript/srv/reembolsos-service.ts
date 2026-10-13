@@ -1,5 +1,5 @@
 /**
- * Handlers do serviço Gestão de Reembolsos (porte de ZBP_R_PC_REEMBOLSO).
+ * Handlers do serviço Gestão de Reembolsos (ReembolsosService).
  * A decisão executa, na mesma transação, o lado do pedido: cancelar com
  * liberação de reserva, snapshots e devolução do pagamento (aprovar) ou
  * retomar o status anterior (rejeitar).
@@ -15,8 +15,13 @@ import { chave } from './lib/requisicao.js'
 type ParametrosDecisao = typeof Reembolso.actions.rejeitarReembolso.__parameters
 
 export default class ReembolsosService extends cds.ApplicationService {
+  /** Registra as actions de decisão do reembolso. */
   override init() {
 
+    /**
+     * Lê a solicitação endereçada e confere que está PENDENTE.
+     * @returns a solicitação, ou null com o erro registrado
+     */
     const solicitacaoPendente = async (req: Request) => {
       const reembolso = await SELECT.one.from(ReembolsosDb, chave(req)!)
       if (!reembolso?.ID || !reembolso.pedido_ID || reembolso.statusReembolso_code !== 'PENDENTE') {
@@ -26,6 +31,11 @@ export default class ReembolsosService extends cds.ApplicationService {
       return { ...reembolso, ID: reembolso.ID, pedido_ID: reembolso.pedido_ID }
     }
 
+    /**
+     * Grava a decisão na solicitação: status, motivo, data e usuário.
+     * @param ID solicitação
+     * @param motivo motivo da decisão (opcional na aprovação)
+     */
     const registrarDecisao = (ID: string, status: StatusReembolso_code, motivo: string | undefined, req: Request) =>
       UPDATE(ReembolsosDb, ID).with({
         statusReembolso_code: status,
@@ -34,6 +44,7 @@ export default class ReembolsosService extends cds.ApplicationService {
         decididoPor: req.user.id
       })
 
+    /** Relê a solicitação pela projeção do serviço (resposta da action). */
     const resultado = (ID: string) => this.run(SELECT.one.from(Reembolsos).where({ ID }))
 
     this.on('aprovarReembolso', Reembolsos, async (req: Request<ParametrosDecisao>) => {

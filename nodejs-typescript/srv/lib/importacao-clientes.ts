@@ -13,9 +13,10 @@ import {
   normalizarCpf, normalizarCep, converterCodelist, opcoesCodelist,
   falharImportacao, concluirImportacao, textosDoErro
 } from './importacao.js'
-import { validarCpf, validarEmail, somenteDigitos, formatarCpf } from './util.js'
+import { validarCpf, validarEmail, validarTelefone, somenteDigitos, formatarCpf } from './util.js'
 import { lerConteudo } from './requisicao.js'
 
+/** Colunas aceitas na planilha: nome do campo, sinônimos do cabeçalho e obrigatoriedade. */
 const COLUNAS: Coluna[] = [
   { campo: 'CPF', obrigatoria: true },
   { campo: 'Nome', sinonimos: ['NOMECOMPLETO', 'NOMEDOCLIENTE'], obrigatoria: true },
@@ -48,6 +49,18 @@ interface ClienteImportado {
   complemento: string
 }
 
+/**
+ * Action importarPlanilha do ClientesService.
+ *  1. Lê a planilha e valida todas as linhas sem gravar nada (CPF, nome,
+ *     e-mail, telefone, gênero, nascimento, CEP e número; CPF repetido no
+ *     arquivo ou já cadastrado).
+ *  2. Havendo qualquer erro, falha a importação inteira com a lista de erros.
+ *  3. Senão cria cada cliente pelo próprio serviço, com o endereço principal;
+ *     um erro dos handlers (ex.: CEP inexistente) também desfaz tudo.
+ * @param req requisição da action (arquivo em base64)
+ * @param srv ClientesService
+ * @returns undefined quando a importação falha
+ */
 export async function importarClientes(req: Request<ParametrosImportacao>, srv: Service): Promise<ResultadoImportacao | undefined> {
   const { registros, erros } = lerPlanilha(await lerConteudo(req.data.arquivo), COLUNAS)
   if (erros.length) return falharImportacao(req, erros)
@@ -77,7 +90,7 @@ export async function importarClientes(req: Request<ParametrosImportacao>, srv: 
     else if (email.length > 100) erros.push(`${pref}E-mail excede 100 caracteres.`)
 
     const telefone = somenteDigitos(valor(reg, 'Telefone'))
-    if (telefone.length < 10 || telefone.length > 11) {
+    if (!validarTelefone(telefone)) {
       erros.push(`${pref}Telefone deve ter 10 ou 11 dígitos (DDD + número).`)
     }
 

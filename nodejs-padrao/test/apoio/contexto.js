@@ -7,9 +7,16 @@ import { before, after } from 'node:test'
 import { join } from 'node:path'
 import { iniciarViaCepFalso } from './viacep-falso.js'
 
+/** Credenciais do usuário administrador (papel Admin). */
 export const ADMIN = { auth: { username: 'admin', password: 'admin' } }
+/** Credenciais do usuário comum (papel Comum: só consulta cadastros). */
 export const COMUM = { auth: { username: 'comum', password: 'comum' } }
 
+/**
+ * Sobe o servidor CAP do projeto (cds.test) apontando o ViaCEP para o
+ * servidor falso. Devolve atalhos HTTP autenticados (ADMIN por padrão) e
+ * do fluxo de rascunho (ativar, editar).
+ */
 export function iniciarServidor() {
   const teste = cds.test(join(import.meta.dirname, '..', '..'))
   const viacep = {}
@@ -33,30 +40,32 @@ export function iniciarServidor() {
 
     /** Ativa (Salvar) o rascunho e devolve a instância ativa. */
     async ativar(caminho, entidade, ID, opcoes = ADMIN) {
-      const { data } = await teste.post(`${caminho}/${entidade}(ID=${ID},IsActiveEntity=false)/${servico(caminho)}.draftActivate`, {}, opcoes)
+      const { data } = await teste.post(`${caminho}/${entidade}(ID=${ID},IsActiveEntity=false)/${SERVICOS[caminho]}.draftActivate`, {}, opcoes)
       return data
     },
 
     /** Cria um rascunho de edição a partir da instância ativa. */
     async editar(caminho, entidade, ID, opcoes = ADMIN) {
-      const { data } = await teste.post(`${caminho}/${entidade}(ID=${ID},IsActiveEntity=true)/${servico(caminho)}.draftEdit`, { PreserveChanges: true }, opcoes)
+      const { data } = await teste.post(`${caminho}/${entidade}(ID=${ID},IsActiveEntity=true)/${SERVICOS[caminho]}.draftEdit`, { PreserveChanges: true }, opcoes)
       return data
     }
   }
   return api
 }
 
+/** Nome do serviço CDS por caminho OData (prefixo das actions de rascunho). */
 const SERVICOS = {
   '/odata/v4/clientes': 'ClientesService',
   '/odata/v4/estoque': 'EstoqueService',
   '/odata/v4/pedidos': 'PedidosService',
   '/odata/v4/reembolsos': 'ReembolsosService'
 }
-function servico(caminho) {
-  return SERVICOS[caminho]
-}
 
-/** Captura o erro de uma chamada que deve falhar: { status, message, details }. */
+/**
+ * Aguarda uma chamada que deve falhar e devolve o erro normalizado:
+ * { status, message, details, codes }. Lança se a chamada tiver sucesso.
+ * @param {Promise<unknown>} promessa
+ */
 export async function falha(promessa) {
   try {
     await promessa
