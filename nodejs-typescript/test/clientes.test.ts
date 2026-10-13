@@ -129,6 +129,13 @@ describe('Gestão de Clientes', () => {
     assert.equal((await falha(api.post(`${C}/Clientes${api.chave(data.value[0].ID)}/ClientesService.draftEdit`, {}, COMUM))).status, 403)
   })
 
+  it('a UI só oferece alteração ao Admin: Permissoes.somenteLeitura por usuário', async () => {
+    const { data: admin } = await api.get(`${C}/Permissoes`)
+    assert.equal(admin.somenteLeitura, false)
+    const { data: comum } = await api.get(`${C}/Permissoes`, COMUM)
+    assert.equal(comum.somenteLeitura, true)
+  })
+
   it('cliente com pedido não pode ser excluído; sem pedido pode', async () => {
     const { data } = await api.get(`/odata/v4/pedidos/Pedidos?$filter=IsActiveEntity eq true&$top=1&$select=cliente_ID`)
     const erro = await falha(api.del(`${C}/Clientes${api.chave(data.value[0].cliente_ID)}`))

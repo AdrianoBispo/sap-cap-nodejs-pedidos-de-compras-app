@@ -155,7 +155,7 @@
                   "actions": {
                     "importarPlanilha": {
                       "press": "gestaoclientes.ext.ImportarPlanilha.abrir",
-                      "visible": true,
+                      "visible": "{= %{/Permissoes/somenteLeitura} === false}",
                       "enabled": true,
                       "requiresSelection": false,
                       "text": "{i18n>importarPlanilha}"
@@ -202,7 +202,16 @@
           "options": {
             "settings": {
               "editableHeaderContent": false,
-              "contextPath": "/Clientes/enderecos"
+              "contextPath": "/Clientes/enderecos",
+              "content": {
+                "header": {
+                  "actions": {
+                    "DataFieldForAction::ClientesService.definirEnderecoPrincipal": {
+                      "visible": "{= %{/Permissoes/somenteLeitura} === false}"
+                    }
+                  }
+                }
+              }
             }
           }
         }

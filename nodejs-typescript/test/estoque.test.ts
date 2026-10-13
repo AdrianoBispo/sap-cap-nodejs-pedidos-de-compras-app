@@ -107,4 +107,11 @@ describe('Gestão de Estoque', () => {
     assert.equal(data.value.length, 1)
     assert.equal((await falha(api.post(`${E}/Itens`, {}, COMUM))).status, 403)
   })
+
+  it('a UI só oferece alteração ao Admin: Permissoes.somenteLeitura por usuário', async () => {
+    const { data: admin } = await api.get(`${E}/Permissoes`)
+    assert.equal(admin.somenteLeitura, false)
+    const { data: comum } = await api.get(`${E}/Permissoes`, COMUM)
+    assert.equal(comum.somenteLeitura, true)
+  })
 })

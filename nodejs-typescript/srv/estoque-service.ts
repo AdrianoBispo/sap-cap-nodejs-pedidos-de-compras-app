@@ -8,12 +8,13 @@
  *  - Inativação e exclusão bloqueadas quando há estoque, reserva ou pedido.
  */
 import cds, { type Request } from '@sap/cds'
-import { Itens, importarPlanilha, type Item } from '#cds-models/EstoqueService'
+import { Itens, Permissoes, importarPlanilha, type Item } from '#cds-models/EstoqueService'
 import { Itens as ItensDb, ItensPedido as ItensPedidoDb, type StatusPedido_code } from '#cds-models/pedidoscompras'
 import { ItensPedido as ItensPedidoServico } from '#cds-models/PedidosService'
 import { gerarSku } from './lib/numeracao.js'
 import { importarItens } from './lib/importacao-estoque.js'
 import { erro, rejeitar } from './lib/mensagens.js'
+import { permissoesDoUsuario } from './lib/permissoes.js'
 import { chave, lerConteudo } from './lib/requisicao.js'
 import { prefixoCategoria, validarImagem } from './lib/util.js'
 
@@ -89,6 +90,9 @@ export default class EstoqueService extends cds.ApplicationService {
       const item = ID ? await SELECT.one.from(ItensDb, ID).columns('qtdeReservada') : null
       if ((item?.qtdeReservada ?? 0) > 0 || (await emPedido(ID, false))) erro(req, 409, 'ITEM_EXCLUSAO_BLOQUEADA')
     })
+
+    // Singleton lido pela UI para esconder o que o usuário não pode alterar
+    this.on('READ', Permissoes, req => permissoesDoUsuario(req))
 
     this.on(importarPlanilha, req => importarItens(req, this))
 
