@@ -1,7 +1,7 @@
 /**
- * Endereços do cliente: preenchimento pelo CEP e validações de gravação
- * (porte de PreencherEnderecoViaCep, ValidarCep, ValidarCepUnico,
- * ValidarNumero e DefinirPrincipalInicial do BO Cliente).
+ * Endereços do cliente: preenchimento a partir do CEP (CEP já validado no
+ * cadastro ou consulta ao ViaCEP) e validações dos endereços no Save do
+ * cliente.
  */
 import cds from '@sap/cds'
 import { consultarCep } from './viacep.js'
@@ -10,12 +10,17 @@ import { erro, aviso } from './mensagens.js'
 
 const { SELECT } = cds.ql
 
+/** Valores de Enderecos.cepStatus (tipo StatusCep do modelo). */
 export const STATUS_CEP = Object.freeze({ validado: 'V', invalido: 'I', indisponivel: 'X' })
 
 /**
  * Preenche logradouro, bairro, cidade, UF, estado, cepGeral e cepStatus a
- * partir do CEP de "endereco" (altera o objeto). Reaproveita os dados de um
- * CEP já validado no cadastro e só consulta o ViaCEP para CEPs desconhecidos.
+ * partir do CEP do endereço (altera o objeto). Reaproveita os dados de um
+ * CEP já validado no cadastro e só consulta o ViaCEP para CEPs novos.
+ * ViaCEP fora do ar gera um aviso e cepStatus X (o Save é barrado depois).
+ * @param {import('@sap/cds').Request} req requisição que recebe o aviso
+ * @param {object} endereco dados do endereço (cep normalizado para dígitos)
+ * @returns {Promise<void>}
  */
 export async function preencherEnderecoPorCep(req, endereco) {
   const cep = somenteDigitos(endereco.cep)
@@ -43,9 +48,14 @@ export async function preencherEnderecoPorCep(req, endereco) {
 }
 
 /**
- * Validações dos endereços enviados no Save do cliente (payload profundo):
- * CEP validado, logradouro/bairro para CEP geral, CEP único por cliente e
- * exatamente um endereço principal.
+ * Valida os endereços enviados no Save do cliente (payload profundo): CEP
+ * validado, logradouro/bairro obrigatórios para CEP geral e CEP único por
+ * cliente. Garante exatamente um endereço principal (o primeiro, se
+ * nenhum foi marcado). Endereço criado sem passar pelo rascunho (ex.:
+ * importação) tem o CEP consultado aqui.
+ * @param {import('@sap/cds').Request} req requisição que recebe os erros
+ * @param {object[]|null|undefined} enderecos endereços do cliente (alterados)
+ * @returns {Promise<void>}
  */
 export async function validarEnderecosDoCliente(req, enderecos) {
   if (!Array.isArray(enderecos)) return

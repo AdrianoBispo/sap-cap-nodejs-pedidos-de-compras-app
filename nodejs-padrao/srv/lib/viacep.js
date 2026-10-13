@@ -1,5 +1,5 @@
 /**
- * Consulta de CEP no ViaCEP (porte de ZCL_PC_VIACEP).
+ * Consulta de CEP no ViaCEP.
  *
  * A URL vem de cds.requires.viacep.credentials.url (package.json), o que
  * permite apontar para outro endpoint por perfil ou variável de ambiente
@@ -14,6 +14,9 @@ const MAX_CACHE = 100
 const cache = new Map()
 
 /**
+ * Consulta o CEP, com cache por processo. Só respostas definitivas (CEP
+ * válido ou inexistente) entram no cache; indisponibilidade não.
+ * @param {unknown} cep CEP com ou sem máscara
  * @returns {Promise<{valido:boolean, indisponivel:boolean, cepGeral:boolean,
  *   endereco?:{logradouro:string,bairro:string,cidade:string,uf:string,estado:string}}>}
  */
@@ -30,11 +33,13 @@ export async function consultarCep(cep) {
   return resultado
 }
 
-/** Limpa o cache (usado nos testes). */
-export function limparCacheCep() {
-  cache.clear()
-}
-
+/**
+ * Chama GET <url>/<cep>/json/ e traduz a resposta: 400/404 ou {"erro": true}
+ * significam CEP inexistente; falha de rede, timeout, outros status HTTP
+ * ou JSON inválido significam serviço indisponível. CEP sem logradouro é
+ * CEP geral de município.
+ * @param {string} cep 8 dígitos
+ */
 async function chamarServico(cep) {
   const config = cds.env.requires.viacep ?? {}
   const base = String(config.credentials?.url ?? 'https://viacep.com.br/ws').replace(/\/$/, '')

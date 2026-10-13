@@ -1,5 +1,5 @@
 /**
- * Handlers do serviço Gestão de Clientes (porte de ZBP_R_PC_CLIENTE).
+ * Handlers do serviço Gestão de Clientes (ClientesService).
  *
  *  - Rascunho: cliente nasce ativo e com score sorteado; CPF, telefone e
  *    e-mail são normalizados; o CEP do endereço preenche o restante (ViaCEP)
@@ -19,8 +19,13 @@ import { chave, ehRascunho, lerConteudo } from './lib/requisicao.js'
 import { somenteDigitos, validarCpf, validarImagem } from './lib/util.js'
 
 export default class ClientesService extends cds.ApplicationService {
+  /** Registra os handlers de clientes, endereços e importação. */
   override init() {
 
+    /**
+     * Valores iniciais do cliente: ativo e com score sorteado de 0 a 100.
+     * @param req NEW do rascunho ou CREATE direto
+     */
     const valoresIniciais = (req: Request<Cliente>) => {
       req.data.clienteAtivo ??= true
       req.data.scoreCliente ??= randomInt(0, 101)
@@ -28,7 +33,10 @@ export default class ClientesService extends cds.ApplicationService {
     this.before('NEW', Clientes.drafts, valoresIniciais)
     this.before('CREATE', Clientes, valoresIniciais)
 
-    // CPF e telefone só com dígitos; e-mail em minúsculas
+    /**
+     * Normaliza os dados digitados: CPF e telefone só com dígitos e e-mail em
+     * minúsculas, antes das validações declarativas.
+     */
     const normalizar = (req: Request<Cliente>) => {
       const d = req.data
       if (typeof d.cpf === 'string') d.cpf = somenteDigitos(d.cpf)
@@ -40,7 +48,11 @@ export default class ClientesService extends cds.ApplicationService {
     this.before('PATCH', Clientes.drafts, req => { delete req.data.scoreCliente })
     this.before(['CREATE', 'UPDATE'], Clientes, normalizar)
 
-    // Foto: JPEG, PNG ou WEBP (MIME, extensão e assinatura binária)
+    /**
+     * Lê a foto enviada e aceita só JPEG, PNG ou WEBP (MIME, extensão e
+     * assinatura binária); outro formato rejeita o upload.
+     * @param req upload no rascunho ou Save
+     */
     const validarFoto = async (req: Request<Cliente>) => {
       const dados = req.data as Omit<Cliente, 'fotoCliente'> & { fotoCliente?: unknown }
       if (!('fotoCliente' in dados) || dados.fotoCliente == null) return
@@ -91,6 +103,11 @@ export default class ClientesService extends cds.ApplicationService {
       if ('cep' in req.data) await preencherEnderecoPorCep(req, req.data)
     })
 
+    /**
+     * Action definirEnderecoPrincipal: marca o endereço como principal e
+     * desmarca os demais do mesmo cliente, no rascunho ou na instância ativa.
+     * @returns o endereço atualizado, lido pelo serviço
+     */
     const definirPrincipal = async (req: Request) => {
       const rascunho = ehRascunho(req)
       const alvo = rascunho ? Enderecos.drafts : EnderecosDb

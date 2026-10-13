@@ -1,5 +1,5 @@
 /**
- * Pagamento simulado com cartão (porte de ZCL_PC_PAGAMENTO_SIM).
+ * Pagamento simulado com cartão.
  *
  * Nenhum dado sensível sai desta função: número completo, validade e CVV são
  * usados apenas em memória. Regras da simulação:
@@ -11,6 +11,7 @@ import { randomInt } from 'node:crypto'
 import type { MetodosPagamento_code } from '#cds-models/pedidoscompras'
 import { somenteDigitos } from './util.js'
 
+/** Métodos de pagamento aceitos (códigos da CodeList MetodosPagamento). */
 export const METODOS: readonly MetodosPagamento_code[] = Object.freeze(['CARTAO_CREDITO', 'CARTAO_DEBITO'])
 
 export interface EntradaPagamento {
@@ -43,8 +44,11 @@ export interface PagamentoProcessado {
 export type ResultadoPagamento = PagamentoInvalido | PagamentoProcessado
 
 /**
- * @param entrada dados digitados na UI
- * @param hoje data de referência (testes)
+ * Valida os dados do cartão e simula a resposta da operadora.
+ * @param entrada dados digitados (validade MM/AA)
+ * @param hoje data de referência para o cartão expirado (testes)
+ * @returns dadosValidos false com o erro de formato, ou o resultado
+ *   seguro (status, bandeira, últimos 4 dígitos, cartão mascarado, autorização)
  */
 export function simularPagamento(entrada: EntradaPagamento, hoje: Date = new Date()): ResultadoPagamento {
   const metodo = String(entrada.metodo ?? '').trim().toUpperCase()
@@ -75,6 +79,10 @@ export function simularPagamento(entrada: EntradaPagamento, hoje: Date = new Dat
   }
 }
 
+/**
+ * Primeiro problema de formato encontrado, em texto para a mensagem
+ * CARTAO_DADOS_INVALIDOS, ou null se os dados estão corretos.
+ */
 function validarFormato({ metodo, numero, validade, cvv }: Record<'metodo' | 'numero' | 'validade' | 'cvv', string>, hoje: Date): string | null {
   if (!(METODOS as readonly string[]).includes(metodo)) return 'método de pagamento inválido'
   if (numero.length < 13 || numero.length > 19) return 'número do cartão deve ter de 13 a 19 dígitos'

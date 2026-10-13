@@ -19,8 +19,10 @@ import { enderecoPrincipal, STATUS } from './pedidos.js'
 import { formatarCpf } from './util.js'
 import { lerConteudo } from './requisicao.js'
 
+/** Tamanho de Pedidos.referenciaImportacao. */
 const TAMANHO_REFERENCIA = 40
 
+/** Colunas aceitas na planilha: nome do campo, sinônimos do cabeçalho e obrigatoriedade. */
 const COLUNAS: Coluna[] = [
   {
     campo: 'Pedido',
@@ -53,6 +55,19 @@ interface GrupoPedido {
   itens: { item_ID: string, qtdeItemPedido: number }[]
 }
 
+/**
+ * Action importarPlanilha do PedidosService.
+ *  1. Valida o formato de cada linha (referência, CPF, SKU, quantidade).
+ *  2. Confere clientes (existentes, ativos, com endereço principal) e itens
+ *     (existentes e ativos) e agrupa as linhas por referência.
+ *  3. Recusa referência já importada para o mesmo cliente.
+ *  4. Confere se o estoque disponível cobre a soma pedida na planilha.
+ *  5. Cria cada pedido pelo serviço (registro com reserva de estoque) e
+ *     grava a referência. Qualquer erro desfaz a importação inteira.
+ * @param req requisição da action (arquivo em base64)
+ * @param srv PedidosService
+ * @returns undefined quando a importação falha
+ */
 export async function importarPedidos(req: Request<ParametrosImportacao>, srv: Service): Promise<ResultadoImportacao | undefined> {
   const { registros, erros } = lerPlanilha(await lerConteudo(req.data.arquivo), COLUNAS)
   if (erros.length) return falharImportacao(req, erros)
@@ -152,7 +167,10 @@ export async function importarPedidos(req: Request<ParametrosImportacao>, srv: S
   return concluirImportacao(req, grupos.size)
 }
 
-/** Mensagens das referências que o cliente já tem num pedido não cancelado. */
+/**
+ * Mensagens dos grupos cuja referência o cliente já tem num pedido não
+ * cancelado (a referência é a chave de idempotência da importação).
+ */
 async function referenciasJaImportadas(grupos: GrupoPedido[]): Promise<string[]> {
   if (!grupos.length) return []
   const existentes = await SELECT.from(Pedidos)

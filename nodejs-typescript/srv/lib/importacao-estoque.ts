@@ -1,8 +1,8 @@
 /**
  * Importação de itens de estoque por planilha: um item por linha, criado
- * ativo e com SKU gerado na hora. Tudo ou nada. Um nome já cadastrado (ou
- * repetido na planilha) é erro, o que evita duplicar o estoque ao reenviar
- * o mesmo arquivo.
+ * ativo e com SKU gerado na hora. Tudo ou nada. Um nome já cadastrado ou
+ * repetido na planilha (sem diferenciar maiúsculas de minúsculas) é erro, o
+ * que evita duplicar o estoque ao reenviar o mesmo arquivo.
  */
 import type { Request, Service } from '@sap/cds'
 import { Categorias, Itens, type ResultadoImportacao } from '#cds-models/pedidoscompras'
@@ -13,6 +13,7 @@ import { converterCodelist, opcoesCodelist, falharImportacao, concluirImportacao
 import type { ParametrosImportacao } from './importacao-clientes.js'
 import { lerConteudo } from './requisicao.js'
 
+/** Colunas aceitas na planilha: nome do campo, sinônimos do cabeçalho e obrigatoriedade. */
 const COLUNAS: Coluna[] = [
   { campo: 'Nome', sinonimos: ['NOMEDOITEM', 'PRODUTO', 'NOMEDOPRODUTO'], obrigatoria: true },
   { campo: 'Descrição' },
@@ -33,11 +34,21 @@ interface ItemImportado {
   currency_code: string
 }
 
+/**
+ * Action importarPlanilha do EstoqueService.
+ *  1. Lê a planilha e valida todas as linhas sem gravar nada (nome único,
+ *     descrição, categoria, quantidade, preço e moeda).
+ *  2. Havendo qualquer erro, falha a importação inteira com a lista de erros.
+ *  3. Senão cria cada item pelo próprio serviço (SKU gerado no Save).
+ * @param req requisição da action (arquivo em base64)
+ * @param srv EstoqueService
+ * @returns undefined quando a importação falha
+ */
 export async function importarItens(req: Request<ParametrosImportacao>, srv: Service): Promise<ResultadoImportacao | undefined> {
   const { registros, erros } = lerPlanilha(await lerConteudo(req.data.arquivo), COLUNAS)
   if (erros.length) return falharImportacao(req, erros)
 
-  const nomesCadastrados = new Set((await SELECT.from(Itens).columns('nome')).map(i => i.nome))
+  const nomesCadastrados = new Set((await SELECT.from(Itens).columns('nome')).map(i => String(i.nome ?? '').toUpperCase()))
   const moedas = new Set((await SELECT.from(Currencies).columns('code')).map(m => m.code))
   const nomesArquivo = new Set<string>()
   const itens: ItemImportado[] = []
@@ -49,7 +60,7 @@ export async function importarItens(req: Request<ParametrosImportacao>, srv: Ser
     const nome = valor(reg, 'Nome')
     if (!nome) erros.push(`${pref}Nome é obrigatório.`)
     else if (nome.length > 120) erros.push(`${pref}Nome excede 120 caracteres.`)
-    else if (nomesCadastrados.has(nome)) erros.push(`${pref}item "${nome}" já cadastrado.`)
+    else if (nomesCadastrados.has(nome.toUpperCase())) erros.push(`${pref}item "${nome}" já cadastrado.`)
     else if (nomesArquivo.has(nome.toUpperCase())) erros.push(`${pref}item "${nome}" repetido na planilha.`)
     else nomesArquivo.add(nome.toUpperCase())
 

@@ -1,9 +1,9 @@
 /**
- * Handlers do serviço Pedidos de Compras (porte de ZBP_R_PC_PEDIDO).
+ * Handlers do serviço Pedidos de Compras (PedidosService).
  *
  *  - Rascunho: status inicial, endereço principal do cliente, preço/total
- *    provisórios dos itens (com side effects na UI) e bloqueio de item sem
- *    estoque (precheck).
+ *    provisórios dos itens (com side effects na UI) e recusa imediata de
+ *    item sem estoque.
  *  - Save: o primeiro Save registra o pedido (ABERTO), gera o número e
  *    reserva o estoque; o Save de uma edição ajusta a reserva pela diferença.
  *  - Ações: efetuarPagamento, aprovarPedido e cancelarPedido, somente sobre o
@@ -35,6 +35,7 @@ type LinhaRascunho = Pick<ItemPedido, 'pedido_ID' | 'item_ID' | 'qtdeItemPedido'
 type RequisicaoLinha = Request & { pedidoDaLinha?: string | null }
 
 export default class PedidosService extends cds.ApplicationService {
+  /** Registra os handlers de rascunho, Save, ações do ciclo de vida e importação. */
   override init() {
 
     // ------------------------------------------------------------------
@@ -67,8 +68,14 @@ export default class PedidosService extends cds.ApplicationService {
       if (req.data.cliente_ID && !endereco) aviso(req, 'CLIENTE_SEM_ENDERECO_PRINCIPAL', {}, 'cliente_ID')
     })
 
-    // Preço provisório, total e SKU da linha; item sem estoque é barrado na
-    // hora. `linha` é o estado gravado no rascunho (só o pedido, na criação).
+    /**
+     * Preço provisório, total e SKU da linha do rascunho; item sem estoque é
+     * recusado na hora (exceto se já estiver reservado pelo pedido). Item que
+     * já está no pedido gravado mantém o preço fixado.
+     * @param req NEW ou PATCH da linha
+     * @param linha estado
+     *   gravado no rascunho (na criação, só o pedido)
+     */
     const calcularLinha = async (req: Request<ItemPedido>, linha: LinhaRascunho | undefined) => {
       const itemID = 'item_ID' in req.data ? req.data.item_ID : linha?.item_ID
       const qtde = Number('qtdeItemPedido' in req.data ? req.data.qtdeItemPedido : linha?.qtdeItemPedido) || 0
@@ -105,7 +112,7 @@ export default class PedidosService extends cds.ApplicationService {
       return calcularLinha(req, linha ?? undefined)
     })
 
-    // Total do pedido no rascunho (soma das linhas)
+    /** Recalcula o total do pedido no rascunho (soma das linhas). */
     const recalcularTotalRascunho = async (pedidoID: string | null | undefined) => {
       if (!pedidoID) return
       const linhas = await SELECT.from(ItensPedido.drafts).columns('valorTotal').where({ pedido_ID: pedidoID })
@@ -141,6 +148,11 @@ export default class PedidosService extends cds.ApplicationService {
     // Ações do ciclo de vida (somente sobre o pedido ativo)
     // ------------------------------------------------------------------
 
+    /**
+     * Pedido alvo de uma ação do ciclo de vida: as ações só valem para o
+     * pedido ativo, sem rascunho de edição aberto.
+     * @returns o pedido, ou null com o erro registrado
+     */
     const pedidoAtivo = async (req: Request) => {
       if (ehRascunho(req)) {
         erro(req, 409, 'ACAO_SOMENTE_ATIVO')

@@ -1,5 +1,5 @@
 /**
- * Handlers do serviço Gestão de Estoque (porte de ZBP_R_PC_ITEM).
+ * Handlers do serviço Gestão de Estoque (EstoqueService).
  *
  *  - SKU gerado no Save com as 3 primeiras letras da categoria; regenerado se
  *    a categoria mudar.
@@ -17,9 +17,11 @@ import { erro, rejeitar } from './lib/mensagens.js'
 import { chave, lerConteudo } from './lib/requisicao.js'
 import { prefixoCategoria, validarImagem } from './lib/util.js'
 
+/** Status em que o pedido ainda está em andamento (prende o item). */
 const STATUS_PEDIDO_ATIVO: readonly StatusPedido_code[] = ['ABERTO', 'AGUARDANDO_APROVACAO', 'PROCESSANDO_REEMBOLSO']
 
 export default class EstoqueService extends cds.ApplicationService {
+  /** Registra os handlers de itens e importação. */
   override init() {
 
     this.before('NEW', Itens.drafts, req => {
@@ -29,7 +31,12 @@ export default class EstoqueService extends cds.ApplicationService {
       req.data.qtdeReservada = 0
     })
 
-    // Item com pedido ativo ou em rascunho (bloqueia inativação/exclusão)
+    /**
+     * Indica se o item está em algum pedido gravado ou em rascunho de pedido.
+     * @param ID item
+     * @param somenteAtivos true: só pedidos em andamento contam
+     *   (inativação); false: qualquer pedido (exclusão)
+     */
     const emPedido = async (ID: string | undefined, somenteAtivos: boolean): Promise<boolean> => {
       // Coluna por caminho com alias: o resultado não tem o formato da entidade
       const linhas = await SELECT.from(ItensPedidoDb)
@@ -60,7 +67,11 @@ export default class EstoqueService extends cds.ApplicationService {
       }
     })
 
-    // Foto: JPEG, PNG ou WEBP
+    /**
+     * Lê a foto enviada e aceita só JPEG, PNG ou WEBP (MIME, extensão e
+     * assinatura binária); outro formato rejeita o upload.
+     * @param req upload no rascunho ou Save
+     */
     const validarFoto = async (req: Request<Item>) => {
       const dados = req.data as Omit<Item, 'fotoItem'> & { fotoItem?: unknown }
       if (!('fotoItem' in dados) || dados.fotoItem == null) return

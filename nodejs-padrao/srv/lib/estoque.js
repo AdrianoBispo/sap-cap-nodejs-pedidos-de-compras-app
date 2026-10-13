@@ -1,9 +1,8 @@
 /**
  * Movimentação de estoque: reserva, liberação e baixa.
  *
- * Equivale às actions internas ReservarEstoque / LiberarReserva / BaixarEstoque
- * do BO Item no RAP. Não são expostas em nenhum serviço: só o domínio de
- * pedidos chama estas funções, sempre dentro da transação da requisição.
+ * Não são expostas em nenhum serviço: só o domínio de pedidos chama estas
+ * funções, sempre dentro da transação da requisição.
  *
  * Concorrência: cada movimento é um UPDATE condicional e atômico ("só reserva
  * se o saldo disponível no banco ainda cobre a quantidade"). Se a condição não
@@ -16,12 +15,18 @@ import { erro } from './mensagens.js'
 
 const { SELECT, UPDATE } = cds.ql
 
+/**
+ * Tipos de movimento: reservar (registro/edição do pedido), liberar
+ * (cancelamento/edição) e baixar (aprovação do pedido).
+ */
 export const MOVIMENTO = Object.freeze({ reservar: 'reservar', liberar: 'liberar', baixar: 'baixar' })
 
 /**
- * Aplica os movimentos e reporta os problemas em req (req.error).
- * @param {import('@sap/cds').Request} req
- * @param {'reservar'|'liberar'|'baixar'} tipo
+ * Aplica os movimentos item a item e reporta os problemas em req (req.error).
+ * Quando o banco recusa um movimento, o motivo é diagnosticado (item
+ * inexistente, inativo, saldo insuficiente ou reserva inconsistente).
+ * @param {import('@sap/cds').Request} req requisição que recebe os erros
+ * @param {'reservar'|'liberar'|'baixar'} tipo movimento a aplicar
  * @param {Map<string, number>} quantidades item_ID -> quantidade
  * @returns {Promise<boolean>} true se todos os movimentos foram aplicados
  */
@@ -49,6 +54,11 @@ export async function movimentarEstoque(req, tipo, quantidades) {
   return ok
 }
 
+/**
+ * Expressões do SET de cada movimento (incremento/decremento feito pelo banco).
+ * @param {'reservar'|'liberar'|'baixar'} tipo
+ * @param {number} qtde
+ */
 function expressoes(tipo, qtde) {
   switch (tipo) {
     case MOVIMENTO.reservar:
@@ -62,7 +72,14 @@ function expressoes(tipo, qtde) {
   }
 }
 
-/** Condição avaliada no banco no momento do UPDATE (saldo atual, não o da UI). */
+/**
+ * Condição avaliada no banco no momento do UPDATE (saldo atual, não o da UI).
+ * @param {object} consulta UPDATE já com o SET do movimento
+ * @param {'reservar'|'liberar'|'baixar'} tipo
+ * @param {string} ID item
+ * @param {number} qtde
+ * @returns {Promise<number>} linhas alteradas (0 ou 1)
+ */
 function condicao(consulta, tipo, ID, qtde) {
   switch (tipo) {
     case MOVIMENTO.reservar:

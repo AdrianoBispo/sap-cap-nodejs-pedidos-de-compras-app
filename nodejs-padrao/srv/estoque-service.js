@@ -1,5 +1,5 @@
 /**
- * Handlers do serviço Gestão de Estoque (porte de ZBP_R_PC_ITEM).
+ * Handlers do serviço Gestão de Estoque (EstoqueService).
  *
  *  - SKU gerado no Save com as 3 primeiras letras da categoria; regenerado se
  *    a categoria mudar.
@@ -16,9 +16,11 @@ import { prefixoCategoria, validarImagem } from './lib/util.js'
 
 const { SELECT } = cds.ql
 
+/** Status em que o pedido ainda está em andamento (prende o item). */
 const STATUS_PEDIDO_ATIVO = ['ABERTO', 'AGUARDANDO_APROVACAO', 'PROCESSANDO_REEMBOLSO']
 
 export default class EstoqueService extends cds.ApplicationService {
+  /** Registra os handlers de itens e importação. */
   init() {
     const { Itens } = this.entities
     const db = cds.entities('pedidoscompras')
@@ -30,7 +32,13 @@ export default class EstoqueService extends cds.ApplicationService {
       req.data.qtdeReservada = 0
     })
 
-    // Item com pedido ativo ou em rascunho (bloqueia inativação/exclusão)
+    /**
+     * Indica se o item está em algum pedido gravado ou em rascunho de pedido.
+     * @param {string|undefined} ID item
+     * @param {boolean} somenteAtivos true: só pedidos em andamento contam
+     *   (inativação); false: qualquer pedido (exclusão)
+     * @returns {Promise<boolean>}
+     */
     const emPedido = async (ID, somenteAtivos) => {
       const linhas = await SELECT.from(db.ItensPedido).columns('pedido.statusPedido_code as status').where({ item_ID: ID })
       if (linhas.some(l => !somenteAtivos || STATUS_PEDIDO_ATIVO.includes(l.status))) return true
@@ -60,7 +68,11 @@ export default class EstoqueService extends cds.ApplicationService {
       }
     })
 
-    // Foto: JPEG, PNG ou WEBP
+    /**
+     * Lê a foto enviada e aceita só JPEG, PNG ou WEBP (MIME, extensão e
+     * assinatura binária); outro formato rejeita o upload.
+     * @param {import('@sap/cds').Request} req upload no rascunho ou Save
+     */
     const validarFoto = async req => {
       if (!('fotoItem' in req.data) || req.data.fotoItem == null) return
       const conteudo = await lerConteudo(req.data.fotoItem)

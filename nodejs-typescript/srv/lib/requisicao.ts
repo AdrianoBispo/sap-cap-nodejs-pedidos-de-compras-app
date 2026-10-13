@@ -1,17 +1,23 @@
 /**
- * Utilitários para ler chaves e o tipo de instância (rascunho ou ativa) de
- * uma requisição CAP.
+ * Utilitários para ler da requisição CAP a chave da instância, o tipo de
+ * instância (rascunho ou ativa) e o conteúdo de uploads.
  */
 import type { Request } from '@sap/cds'
 
-/** Chave ID da instância endereçada (último segmento do caminho). */
+/**
+ * Chave ID da instância endereçada: o último segmento do caminho (ex.:
+ * Pedidos(ID=...,IsActiveEntity=true)) ou, sem caminho, req.data.ID.
+ */
 export function chave(req: Request): string | undefined {
   const ultimo: unknown = req.params?.at(-1)
   if (ultimo && typeof ultimo === 'object') return (ultimo as { ID?: string }).ID
   return (ultimo as string | undefined) ?? (req.data as { ID?: string } | undefined)?.ID
 }
 
-/** true quando a requisição endereça um rascunho (IsActiveEntity=false). */
+/**
+ * Indica se a requisição endereça um rascunho: IsActiveEntity=false na
+ * chave ou entidade alvo .drafts (eventos NEW, PATCH e DISCARD).
+ */
 export function ehRascunho(req: Request): boolean {
   const ultimo: unknown = req.params?.at(-1)
   if (ultimo && typeof ultimo === 'object' && 'IsActiveEntity' in ultimo) return ultimo.IsActiveEntity === false
@@ -20,8 +26,10 @@ export function ehRascunho(req: Request): boolean {
 }
 
 /**
- * Lê o conteúdo de um upload para um Buffer: Buffer, texto base64 (actions de
- * importação), stream (mídia via PUT) ou bytes.
+ * Lê o conteúdo de um upload para um Buffer: Buffer, texto base64 (actions
+ * de importação), stream (mídia enviada por PUT) ou bytes.
+ * @param valor conteúdo recebido em req.data
+ * @returns null/undefined são devolvidos como vieram
  */
 export async function lerConteudo(valor: unknown): Promise<Buffer | null | undefined> {
   if (valor == null) return valor as null | undefined
