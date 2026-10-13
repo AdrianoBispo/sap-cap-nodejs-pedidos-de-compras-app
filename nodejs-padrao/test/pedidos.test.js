@@ -251,8 +251,18 @@ describe('Pedidos de Compras', () => {
       await api.editar(P, 'Pedidos', pedido.ID)
       const emEdicao = await falha(acao(pedido.ID, 'efetuarPagamento', CARTAO_OK))
       assert.match(emEdicao.message, /em edição/)
-      const noRascunho = await falha(api.post(`${P}/Pedidos${api.chave(pedido.ID, false)}/PedidosService.efetuarPagamento`, CARTAO_OK))
-      assert.ok(noRascunho.status >= 400)
+      // No rascunho a action chega ao handler (não 501 "no handler") e é recusada
+      const naoRascunho = (nome, dados) =>
+        falha(api.post(`${P}/Pedidos${api.chave(pedido.ID, false)}/PedidosService.${nome}`, dados))
+      for (const [nome, dados] of [
+        ['efetuarPagamento', CARTAO_OK],
+        ['aprovarPedido', {}],
+        ['cancelarPedido', { motivoCancelamento: 'Teste' }]
+      ]) {
+        const noRascunho = await naoRascunho(nome, dados)
+        assert.equal(noRascunho.status, 409, nome)
+        assert.match(noRascunho.message, /pedido salvo/, nome)
+      }
     })
   })
 

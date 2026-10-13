@@ -155,9 +155,17 @@ export default class PedidosService extends cds.ApplicationService {
       }
       return lerPedidoParaAcao(req, chave(req))
     }
+
+    /** Relê o pedido pela projeção do serviço (resposta das actions). */
     const resultado = ID => this.run(SELECT.one.from(Pedidos).where({ ID }))
 
-    this.on('efetuarPagamento', Pedidos, async req => {
+    /**
+     * Action efetuarPagamento: pedido ABERTO, dados do cartão só em memória.
+     * Aprovado, o pedido vai para AGUARDANDO_APROVACAO; recusado, segue ABERTO
+     * para nova tentativa.
+     * @param {import('@sap/cds').Request} req parâmetros do cartão
+     */
+    const pagar = async req => {
       const pedido = await pedidoAtivo(req)
       if (!pedido) return
       if (pedido.statusPedido_code !== STATUS.aberto) return erroStatus(req, pedido)
@@ -176,9 +184,14 @@ export default class PedidosService extends cds.ApplicationService {
       if (aprovado) info(req, 'PAGAMENTO_APROVADO')
       else aviso(req, 'PAGAMENTO_RECUSADO')
       return resultado(pedido.ID)
-    })
+    }
 
-    this.on('aprovarPedido', Pedidos, async req => {
+    /**
+     * Action aprovarPedido: pedido AGUARDANDO_APROVACAO com pagamento aprovado.
+     * Baixa o estoque reservado, gera os snapshots e finaliza o pedido.
+     * @param {import('@sap/cds').Request} req
+     */
+    const aprovar = async req => {
       const pedido = await pedidoAtivo(req)
       if (!pedido) return
       if (pedido.statusPedido_code === STATUS.aberto) return erro(req, 409, 'PEDIDO_PAGAMENTO_PENDENTE')
@@ -194,15 +207,31 @@ export default class PedidosService extends cds.ApplicationService {
       })
       info(req, 'PEDIDO_FINALIZADO', { numero: pedido.numeroPedido })
       return resultado(pedido.ID)
-    })
+    }
 
-    this.on('cancelarPedido', Pedidos, async req => {
+    /**
+     * Action cancelarPedido: cancela o pedido ou, com pagamento aprovado, abre a
+     * solicitação de reembolso (ver cancelarPedido em srv/lib/pedidos).
+     * @param {import('@sap/cds').Request} req motivo do cancelamento
+     */
+    const cancelar = async req => {
       const pedido = await pedidoAtivo(req)
       if (!pedido) return
       await cancelarPedido(req, pedido, req.data.motivoCancelamento)
       if (req.errors) return
       return resultado(pedido.ID)
-    })
+    }
+
+    // As actions vinculadas também existem no rascunho (Pedidos.drafts), mas no
+    // lean draft o handler de Pedidos não vale para o rascunho: sem registrar
+    // os dois, a chamada no rascunho termina em 501 "has no handler" em vez
+    // da mensagem ACAO_SOMENTE_ATIVO.
+    this.on('efetuarPagamento', Pedidos, pagar)
+    this.on('efetuarPagamento', Pedidos.drafts, pagar)
+    this.on('aprovarPedido', Pedidos, aprovar)
+    this.on('aprovarPedido', Pedidos.drafts, aprovar)
+    this.on('cancelarPedido', Pedidos, cancelar)
+    this.on('cancelarPedido', Pedidos.drafts, cancelar)
 
     this.on('importarPlanilha', req => importarPedidos(req, this))
 
