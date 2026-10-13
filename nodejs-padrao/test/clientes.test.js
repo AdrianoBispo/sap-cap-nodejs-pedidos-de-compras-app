@@ -1,7 +1,6 @@
 /**
  * Gestão de Clientes: rascunho, CPF, endereços com ViaCEP, endereço principal,
- * autorização e exclusão (equivalente a ltcl_persistencia_endereco e aos
- * testes de CPF/e-mail/telefone do RAP).
+ * validações de CPF, e-mail e telefone, autorização e exclusão.
  */
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'

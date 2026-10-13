@@ -1,7 +1,6 @@
 /**
- * Testes de unidade das funções puras (equivalentes a ltcl_digitos_cpf,
- * ltcl_email_imagem, ltcl_estoque_endereco e às classes de teste de
- * ZCL_PC_PAGAMENTO_SIM e ZCL_PC_PLANILHA do RAP). Não sobem servidor.
+ * Testes de unidade das funções puras (validações, formatação, pagamento
+ * simulado e leitor de planilhas). Não sobem servidor.
  */
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
@@ -10,8 +9,8 @@ import {
   calcularStatusEstoque, formatarEndereco, prefixoCategoria, montarSku, somarQuantidades
 } from '../srv/lib/util.js'
 import { simularPagamento } from '../srv/lib/pagamento-simulado.js'
-import { lerPlanilha, paraData, paraDecimal, paraInteiro, normalizarNome, MAX_LINHAS } from '../srv/lib/planilha.js'
-import { gerarXlsx } from './apoio/xlsx.js'
+import { lerPlanilha, paraData, paraDecimal, paraInteiro, normalizarNome, MAX_LINHAS, MAX_DESCOMPACTADO } from '../srv/lib/planilha.js'
+import { gerarXlsx, zipar } from './apoio/xlsx.js'
 
 const PNG = Buffer.from('89504e470d0a1a0a0000', 'hex')
 const JPEG = Buffer.from('ffd8ffe000104a464946', 'hex')
@@ -149,6 +148,11 @@ describe('leitor de planilhas', () => {
     assert.match(lerPlanilha(Buffer.from(muitas), colunas).erros[0], /máximo é 500/)
     assert.match(lerPlanilha(Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0, 0]), colunas).erros[0], /\.xls/)
     assert.match(lerPlanilha(Buffer.alloc(0), colunas).erros[0], /vazio/)
+  })
+
+  it('XLSX cujo conteúdo descompactado excede o limite é recusado', () => {
+    const grande = zipar({ 'xl/worksheets/sheet1.xml': ' '.repeat(MAX_DESCOMPACTADO + 1) })
+    assert.match(lerPlanilha(grande, colunas).erros[0], /excede 50 MB/)
   })
 
   it('conversões de data, número e nome de coluna', () => {

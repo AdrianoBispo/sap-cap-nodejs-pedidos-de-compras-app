@@ -1,6 +1,6 @@
 /**
- * Ciclo de vida do pedido (equivalente às classes ltcl_registro_pedido,
- * ltcl_edicao_pedido e ltcl_ciclo_pedido do RAP).
+ * Ciclo de vida do pedido: registro com reserva de estoque, edição dos itens,
+ * pagamento, aprovação e cancelamento.
  */
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'

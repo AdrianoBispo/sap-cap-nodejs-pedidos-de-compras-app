@@ -7,6 +7,7 @@
  */
 import { createServer } from 'node:http'
 
+/** CEPs conhecidos pelo ViaCEP falso e o endereço devolvido. */
 export const CEPS = {
   '01001000': { logradouro: 'Praça da Sé', bairro: 'Sé', localidade: 'São Paulo', uf: 'SP', estado: 'São Paulo' },
   '70040010': { logradouro: 'Esplanada dos Ministérios', bairro: 'Zona Cívico-Administrativa', localidade: 'Brasília', uf: 'DF', estado: 'Distrito Federal' },
@@ -18,6 +19,11 @@ export const CEP_INEXISTENTE = '99999999'
 export const CEP_INDISPONIVEL = '55555555'
 export const CEP_GERAL = '69990000'
 
+/**
+ * Sobe o ViaCEP falso numa porta livre de 127.0.0.1.
+ * @returns {Promise<{url:string, chamadas:number, fechar:() => Promise<void>}>} url base,
+ *   número de chamadas recebidas e função para encerrar o servidor
+ */
 export async function iniciarViaCepFalso() {
   let chamadas = 0
   const servidor = createServer((req, res) => {

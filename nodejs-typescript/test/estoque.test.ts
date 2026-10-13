@@ -1,7 +1,6 @@
 /**
  * Gestão de Estoque: SKU, disponibilidade e status calculados, inativação e
- * exclusão controladas (equivalente a ltcl_sku_item e aos testes de status
- * de estoque do RAP).
+ * exclusão controladas.
  */
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
