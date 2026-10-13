@@ -1,20 +1,61 @@
 {
+  // Depuração no VS Code: abra a pasta nodejs-padrao como workspace e rode
+  // "npm install" antes. Os breakpoints em srv/*.js, srv/lib/*.js e test/*.js
+  // são atingidos em todas as configurações (os processos filhos do cds watch
+  // e do node --test são anexados automaticamente).
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "cds serve",
-      "request": "launch",
+      "name": "Servidor (cds watch)",
       "type": "node",
+      "request": "launch",
       "cwd": "${workspaceFolder}",
-      "runtimeExecutable": "cds",
-      "args": [
-        "serve",
-        "--with-mocks",
-        "--in-memory?"
-      ],
-      "skipFiles": [
-        "<node_internals>/**"
-      ]
+      "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/cds",
+      "args": ["watch"],
+      "console": "integratedTerminal",
+      "autoAttachChildProcesses": true,
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
+    },
+    {
+      "name": "Servidor sem recarga (cds serve)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/cds",
+      "args": ["serve", "--with-mocks", "--in-memory?"],
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
+    },
+    {
+      "name": "Testes (todos)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["--test", "--test-concurrency=1", "test/**/*.test.js"],
+      "env": { "CDS_PLUGIN_UI5_ACTIVE": "false" },
+      "console": "integratedTerminal",
+      "autoAttachChildProcesses": true,
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
+    },
+    {
+      "name": "Teste do arquivo aberto",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["--test", "--test-concurrency=1", "${file}"],
+      "env": { "CDS_PLUGIN_UI5_ACTIVE": "false" },
+      "console": "integratedTerminal",
+      "autoAttachChildProcesses": true,
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
+    },
+    {
+      "name": "Anexar a um processo Node.js",
+      "type": "node",
+      "request": "attach",
+      "processId": "${command:PickProcess}",
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
     }
   ]
 }

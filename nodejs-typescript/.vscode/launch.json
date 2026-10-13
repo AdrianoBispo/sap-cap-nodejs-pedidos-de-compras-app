@@ -1,20 +1,80 @@
 {
+  // Depuração no VS Code: abra a pasta nodejs-typescript como workspace e rode
+  // "npm install" antes. Os .ts são executados pelo tsx (sem build) com source
+  // maps, então os breakpoints vão direto em srv/*.ts, srv/lib/*.ts e
+  // test/*.ts. Os processos filhos do cds-tsx watch e do node --test são
+  // anexados automaticamente.
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "cds serve",
-      "request": "launch",
+      "name": "Servidor (cds-tsx watch)",
       "type": "node",
+      "request": "launch",
       "cwd": "${workspaceFolder}",
-      "runtimeExecutable": "cds",
-      "args": [
-        "serve",
-        "--with-mocks",
-        "--in-memory?"
-      ],
-      "skipFiles": [
-        "<node_internals>/**"
-      ]
+      "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/cds-tsx",
+      "args": ["watch"],
+      // O cds-tsx executa via "#!/usr/bin/env tsx": o tsx local precisa estar no PATH
+      "env": { "PATH": "${workspaceFolder}/node_modules/.bin:${env:PATH}" },
+      "console": "integratedTerminal",
+      "autoAttachChildProcesses": true,
+      "sourceMaps": true,
+      "resolveSourceMapLocations": ["${workspaceFolder}/**", "!**/node_modules/**"],
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
+    },
+    {
+      "name": "Servidor sem recarga (cds-tsx serve)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "cds-typer",
+      "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/cds-tsx",
+      "args": ["serve", "--with-mocks", "--in-memory?"],
+      // O cds-tsx executa via "#!/usr/bin/env tsx": o tsx local precisa estar no PATH
+      "env": { "PATH": "${workspaceFolder}/node_modules/.bin:${env:PATH}" },
+      "console": "integratedTerminal",
+      "autoAttachChildProcesses": true,
+      "sourceMaps": true,
+      "resolveSourceMapLocations": ["${workspaceFolder}/**", "!**/node_modules/**"],
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
+    },
+    {
+      "name": "Testes (todos)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "cds-typer",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["--import", "tsx", "--test", "--test-concurrency=1", "test/**/*.test.ts"],
+      "env": { "CDS_TYPESCRIPT": "tsx", "CDS_PLUGIN_UI5_ACTIVE": "false" },
+      "console": "integratedTerminal",
+      "autoAttachChildProcesses": true,
+      "sourceMaps": true,
+      "resolveSourceMapLocations": ["${workspaceFolder}/**", "!**/node_modules/**"],
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
+    },
+    {
+      "name": "Teste do arquivo aberto",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "cds-typer",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["--import", "tsx", "--test", "--test-concurrency=1", "${file}"],
+      "env": { "CDS_TYPESCRIPT": "tsx", "CDS_PLUGIN_UI5_ACTIVE": "false" },
+      "console": "integratedTerminal",
+      "autoAttachChildProcesses": true,
+      "sourceMaps": true,
+      "resolveSourceMapLocations": ["${workspaceFolder}/**", "!**/node_modules/**"],
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
+    },
+    {
+      "name": "Anexar a um processo Node.js",
+      "type": "node",
+      "request": "attach",
+      "processId": "${command:PickProcess}",
+      "sourceMaps": true,
+      "resolveSourceMapLocations": ["${workspaceFolder}/**", "!**/node_modules/**"],
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
     }
   ]
 }

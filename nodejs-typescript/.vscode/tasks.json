@@ -1,10 +1,39 @@
 {
+  // Tarefas do projeto (Terminal > Executar Tarefa). Usam os scripts do package.json.
   "version": "2.0.0",
   "tasks": [
     {
-      "type": "shell",
-      "label": "cds watch",
-      "command": "cds watch",
+      "label": "cds-tsx watch",
+      "type": "npm",
+      "script": "watch",
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "cds-typer",
+      "detail": "Gera os tipos do modelo CDS em @cds-models (usada antes de depurar o servidor sem recarga e os testes)",
+      "type": "npm",
+      "script": "typer",
+      "problemMatcher": []
+    },
+    {
+      "label": "testes",
+      "type": "npm",
+      "script": "test",
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "typecheck",
+      "type": "npm",
+      "script": "typecheck",
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "lint",
+      "type": "npm",
+      "script": "lint",
+      "problemMatcher": ["$eslint-stylish", "$tsc"]
     }
   ]
 }
