@@ -34,7 +34,9 @@
 - [Funcionalidades](#funcionalidades)
 - [Tecnologias](#tecnologias)
 - [Arquitetura](#arquitetura)
+  - [Arquitetura na SAP BTP (implantação)](#arquitetura-na-sap-btp-implantação)
   - [Fluxo do pedido](#fluxo-do-pedido)
+- [Diagramas dos processos](#diagramas-dos-processos)
 - [Estrutura do repositório](#estrutura-do-repositório)
   - [Convenção de arquivos](#convenção-de-arquivos)
 - [Pré-requisitos](#pré-requisitos)
@@ -182,6 +184,17 @@ regras de domínio, dos testes e dos scripts.
 
 ## Arquitetura
 
+<p align="center">
+  <a href="docs/assets/diagrama-arquitetura.png"><img src="docs/assets/diagrama-arquitetura.png" alt="Arquitetura da solução: launchpad, apps Fiori Elements e freestyle, serviços OData do SAP CAP, srv/lib, modelo CDS, SQLite, SAP HANA Cloud, XSUAA e API ViaCEP" width="900"></a>
+</p>
+
+Diagrama feito no draw.io com as formas oficiais da SAP; o arquivo editável, com esta e as páginas da
+seção [Diagramas dos processos](#diagramas-dos-processos), está em
+[`docs/arquitetura-e-processos.drawio`](docs/arquitetura-e-processos.drawio).
+
+<details>
+<summary>Versão em Mermaid</summary>
+
 ```mermaid
 flowchart LR
     subgraph UI["Front-end — SAPUI5 (OData V4)"]
@@ -223,14 +236,50 @@ flowchart LR
     LIB --> VIACEP[("API ViaCEP")]
 ```
 
+</details>
+
 Cada aplicação tem seu próprio serviço OData. As regras que atravessam
 domínios — movimentação de estoque, snapshots, cancelamento e reembolso — ficam em `srv/lib` e rodam
 sempre na transação da requisição: qualquer erro desfaz tudo.
+
+### Arquitetura na SAP BTP (implantação)
+
+<p align="center">
+  <a href="docs/assets/diagrama-arquitetura-btp.png"><img src="docs/assets/diagrama-arquitetura-btp.png" alt="Arquitetura alvo na SAP BTP: SAP Build Work Zone, HTML5 Application Repository, Destination service, serviço CAP e db-deployer no Cloud Foundry, HDI container no SAP HANA Cloud, XSUAA, provedor de identidade e API ViaCEP" width="900"></a>
+</p>
+
+Arquitetura alvo da implantação, ainda pendente (veja
+[Limitações conhecidas e pendências](#limitações-conhecidas-e-pendências)). Hoje o projeto roda
+localmente com SQLite e autenticação *mocked*.
+
+- **SAP Build Work Zone, standard edition**: site com os 8 tiles e approuter gerenciado. As apps SAPUI5
+  ficam no **HTML5 Application Repository**, e o **Destination service** aponta para a API do serviço
+  CAP, repassando o token do usuário (`forwardAuthToken`).
+- **SAP BTP, Cloud Foundry runtime**:
+  - `pedidos-compras-srv`: Node.js 22 com `@sap/cds` 10 e os 5 serviços OData V4.
+  - `pedidos-compras-db-deployer`: tarefa que implanta tabelas, views, CodeLists e dados no HDI.
+- **SAP HANA Cloud**: HDI container do plano `hdi-shared`, vinculado ao serviço CAP.
+- **XSUAA** (SAP Authorization and Trust Management service):
+  - o `xs-security.json` define os escopos e as role collections `Admin` e `Comum`, usados pelos
+    `@restrict` dos serviços;
+  - a autenticação é delegada ao SAP ID service ou ao Identity Authentication (SAP Cloud Identity Services).
+- **API ViaCEP**: serviço externo. A URL vem da variável `cds_requires_viacep_credentials_url`.
+- **Implantação**:
+  1. `cds add hana,xsuaa,html5-repo,workzone,mta` gera o `mta.yaml`;
+  2. `mbt build` monta o pacote;
+  3. `cf deploy` implanta o serviço, o db-deployer, as apps e as instâncias de serviço.
 
 ### Fluxo do pedido
 
 Cinco status: `ABERTO`, `AGUARDANDO_APROVACAO`, `PROCESSANDO_REEMBOLSO`, `CANCELADO` e `FINALIZADO`.
 Status do pagamento: `PENDENTE`, `APROVADO`, `RECUSADO` e `DEVOLVIDO` (quando o reembolso é aprovado).
+
+<p align="center">
+  <a href="docs/assets/diagrama-ciclo-pedido.png"><img src="docs/assets/diagrama-ciclo-pedido.png" alt="Ciclo de vida do pedido: status, transições e ações por status" width="900"></a>
+</p>
+
+<details>
+<summary>Versão em Mermaid</summary>
 
 ```mermaid
 stateDiagram-v2
@@ -246,6 +295,66 @@ stateDiagram-v2
     FINALIZADO --> [*]
     CANCELADO --> [*]
 ```
+
+</details>
+
+---
+
+## Diagramas dos processos
+
+Fluxogramas dos principais processos, em raias por ator (usuário, serviço SAP CAP, banco de dados e
+serviço externo). Verde indica sucesso, vermelho erro e laranja aviso. Todos estão em
+[`docs/arquitetura-e-processos.drawio`](docs/arquitetura-e-processos.drawio) (uma página por processo).
+
+### Registro do pedido
+
+Do rascunho ao pedido `ABERTO`: validações, número, preços fixados e reserva do estoque.
+
+<p align="center">
+  <a href="docs/assets/diagrama-registro-pedido.png"><img src="docs/assets/diagrama-registro-pedido.png" alt="Fluxograma do registro do pedido" width="900"></a>
+</p>
+
+### Efetuar Pagamento
+
+Diálogo com máscara, validação dos dados do cartão, transição atômica de status e gravação só do
+resultado seguro.
+
+<p align="center">
+  <a href="docs/assets/diagrama-efetuar-pagamento.png"><img src="docs/assets/diagrama-efetuar-pagamento.png" alt="Fluxograma do Efetuar Pagamento" width="900"></a>
+</p>
+
+### Aprovação do pedido
+
+Transição atômica para `FINALIZADO`, baixa do estoque e snapshots.
+
+<p align="center">
+  <a href="docs/assets/diagrama-aprovacao-pedido.png"><img src="docs/assets/diagrama-aprovacao-pedido.png" alt="Fluxograma da aprovação do pedido" width="900"></a>
+</p>
+
+### Cancelamento e reembolso
+
+Cancelamento direto (sem pagamento aprovado) ou solicitação de reembolso decidida na Gestão de
+Reembolsos.
+
+<p align="center">
+  <a href="docs/assets/diagrama-cancelamento-reembolso.png"><img src="docs/assets/diagrama-cancelamento-reembolso.png" alt="Fluxograma do cancelamento do pedido e do reembolso" width="900"></a>
+</p>
+
+### Endereço do cliente: consulta de CEP
+
+Reaproveitamento de CEP já validado, consulta ao ViaCEP, CEP geral e validações do Save.
+
+<p align="center">
+  <a href="docs/assets/diagrama-endereco-cep.png"><img src="docs/assets/diagrama-endereco-cep.png" alt="Fluxograma da consulta de CEP do endereço do cliente" width="900"></a>
+</p>
+
+### Importação por planilha
+
+Validação de todas as linhas antes de gravar (tudo ou nada).
+
+<p align="center">
+  <a href="docs/assets/diagrama-importacao-planilha.png"><img src="docs/assets/diagrama-importacao-planilha.png" alt="Fluxograma da importação em massa por planilha" width="900"></a>
+</p>
 
 ---
 
@@ -287,7 +396,8 @@ stateDiagram-v2
 │   └── tsconfig.json, tsconfig.cdsbuild.json
 │
 ├── docs/
-│   ├── assets/                        imagens usadas neste README
+│   ├── assets/                        imagens usadas neste README (capturas e diagramas)
+│   ├── arquitetura-e-processos.drawio arquitetura e fluxogramas (draw.io)
 │   ├── modelos-importacao/            modelos de planilha (.xlsx e .csv)
 │   ├── especificacao-tecnica.md       especificação técnica (Markdown)
 │   └── especificacao-tecnica.docx     especificação técnica (Word)
@@ -629,7 +739,8 @@ o botão *Abrir gestão* navega para a app de gestão do domínio.
   modelo usa funções portáveis do CAP e colunas geradas suportadas pelo HANA, mas a execução sobre o
   HANA Cloud ainda não foi testada.
 - **Autenticação de produção** (XSUAA/IAS) e descritor MTA ainda não configurados; em desenvolvimento
-  a autenticação é *mocked*.
+  a autenticação é *mocked*. A arquitetura alvo está em
+  [Arquitetura na SAP BTP (implantação)](#arquitetura-na-sap-btp-implantação).
 - **Object Page**: as seções são carregadas sob demanda; ao abrir um pedido a página pode começar
   rolada para *Dados do Pedido* — role para cima ou use a barra de seções para ver *Dados do Cliente*.
 
@@ -639,6 +750,7 @@ o botão *Abrir gestão* navega para a app de gestão do domínio.
 
 | Versão | Mudanças |
 | --- | --- |
+| v1.8 | Diagramas no draw.io com as formas oficiais da SAP (`docs/arquitetura-e-processos.drawio`): arquitetura, arquitetura alvo na SAP BTP (SAP HANA Cloud, XSUAA e Cloud Foundry), ciclo de vida do pedido e fluxogramas do registro, pagamento, aprovação, cancelamento e reembolso, consulta de CEP e importação por planilha, exportados como imagens em `docs/assets` e exibidos neste README |
 | v1.7 | Concorrência nas ações do pedido: pagar, aprovar e cancelar o pedido e decidir o reembolso começam por um `UPDATE` condicional ao status lido (`transicionarPedido` em `srv/lib/pedidos`), que também bloqueia o pedido até o fim da transação; a ação que perde a corrida é recusada com `PEDIDO_ALTERADO_CONCORRENTE` (ou `REEMBOLSO_STATUS_INVALIDO`) sem liberar a reserva de novo, baixar estoque ou gravar pagamento (antes, um segundo cancelamento simultâneo liberava a reserva de outros pedidos); o Save da edição do pedido também confere o status; pagar e aprovar passam para `srv/lib/pedidos` (`efetuarPagamento` e `finalizarPedido`); `.vscode` de cada implementação igual ao gerado pelo `cds init` (como no SAP Business Application Studio): depuração *cds serve* e tarefa *cds watch*; 72 testes em JavaScript e 74 em TypeScript; especificação técnica 2.4 |
 | v1.6 | Revisão do código: comentários explicam só a aplicação CAP e todas as funções foram documentadas (JSDoc/TSDoc); READMEs e especificação técnica 2.3 (.md e .docx) sem as comparações com o projeto RAP, mantido só o link para o repositório dele; singleton `Permissoes` esconde Criar, Editar, Excluir, Importar e *Definir como principal* do usuário só de consulta em Clientes e Estoque; ações do pedido chamadas no rascunho devolvem 409 (`ACAO_SOMENTE_ATIVO`) em vez de 501; importação de estoque recusa nome já cadastrado sem diferenciar maiúsculas; leitor de `.xlsx` limita o conteúdo descompactado a 50 MB; `package-lock.json` da versão TypeScript atualizado (`@sap/cds-dk` 10.1.2); 71 testes em JavaScript e 73 em TypeScript |
 | v1.5 | Análises divididas em quatro apps (Análise de Pedidos de Compras, de Clientes, de Itens do Estoque e de Pedidos de Reembolsos), com tiles próprios no launchpad e testes QUnit corrigidos; máscara de digitação no diálogo *Efetuar Pagamento*; navegações das Object Pages completadas (pedido → reembolso, histórico do cliente e dos itens → apps de origem, Object Page do item no encerramento); especificação técnica 2.2 |
@@ -657,6 +769,8 @@ o botão *Abrir gestão* navega para a app de gestão do domínio.
 - [README da implementação JavaScript](nodejs-padrao/README.md).
 - [README da implementação TypeScript](nodejs-typescript/README.md).
 - [Modelos de importação](docs/modelos-importacao).
+- [Arquitetura e fluxogramas dos processos](docs/arquitetura-e-processos.drawio) (draw.io, formas oficiais da SAP);
+  as imagens estão em [Arquitetura](#arquitetura) e [Diagramas dos processos](#diagramas-dos-processos).
 - Aplicação em SAP RAP / ABAP Cloud: [sap-abap-rap-pedidos-de-compras-app](https://github.com/AdrianoBispo/sap-abap-rap-pedidos-de-compras-app).
 
 ---
