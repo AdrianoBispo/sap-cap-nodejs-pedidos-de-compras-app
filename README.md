@@ -35,6 +35,7 @@
 - [Tecnologias](#tecnologias)
 - [Arquitetura](#arquitetura)
   - [Fluxo do pedido](#fluxo-do-pedido)
+- [Diagramas dos processos](#diagramas-dos-processos)
 - [Estrutura do repositório](#estrutura-do-repositório)
   - [Convenção de arquivos](#convenção-de-arquivos)
 - [Pré-requisitos](#pré-requisitos)
@@ -182,6 +183,17 @@ regras de domínio, dos testes e dos scripts.
 
 ## Arquitetura
 
+<p align="center">
+  <a href="docs/assets/diagrama-arquitetura.png"><img src="docs/assets/diagrama-arquitetura.png" alt="Arquitetura da solução: launchpad, apps Fiori Elements e freestyle, serviços OData do SAP CAP, srv/lib, modelo CDS, SQLite, SAP HANA Cloud, XSUAA e API ViaCEP" width="900"></a>
+</p>
+
+Diagrama feito no draw.io com as formas oficiais da SAP; o arquivo editável, com esta e as páginas da
+seção [Diagramas dos processos](#diagramas-dos-processos), está em
+[`docs/arquitetura-e-processos.drawio`](docs/arquitetura-e-processos.drawio).
+
+<details>
+<summary>Versão em Mermaid</summary>
+
 ```mermaid
 flowchart LR
     subgraph UI["Front-end — SAPUI5 (OData V4)"]
@@ -223,6 +235,8 @@ flowchart LR
     LIB --> VIACEP[("API ViaCEP")]
 ```
 
+</details>
+
 Cada aplicação tem seu próprio serviço OData. As regras que atravessam
 domínios — movimentação de estoque, snapshots, cancelamento e reembolso — ficam em `srv/lib` e rodam
 sempre na transação da requisição: qualquer erro desfaz tudo.
@@ -231,6 +245,13 @@ sempre na transação da requisição: qualquer erro desfaz tudo.
 
 Cinco status: `ABERTO`, `AGUARDANDO_APROVACAO`, `PROCESSANDO_REEMBOLSO`, `CANCELADO` e `FINALIZADO`.
 Status do pagamento: `PENDENTE`, `APROVADO`, `RECUSADO` e `DEVOLVIDO` (quando o reembolso é aprovado).
+
+<p align="center">
+  <a href="docs/assets/diagrama-ciclo-pedido.png"><img src="docs/assets/diagrama-ciclo-pedido.png" alt="Ciclo de vida do pedido: status, transições e ações por status" width="900"></a>
+</p>
+
+<details>
+<summary>Versão em Mermaid</summary>
 
 ```mermaid
 stateDiagram-v2
@@ -246,6 +267,66 @@ stateDiagram-v2
     FINALIZADO --> [*]
     CANCELADO --> [*]
 ```
+
+</details>
+
+---
+
+## Diagramas dos processos
+
+Fluxogramas dos principais processos, em raias por ator (usuário, serviço SAP CAP, banco de dados e
+serviço externo). Verde indica sucesso, vermelho erro e laranja aviso. Todos estão em
+[`docs/arquitetura-e-processos.drawio`](docs/arquitetura-e-processos.drawio) (uma página por processo).
+
+### Registro do pedido
+
+Do rascunho ao pedido `ABERTO`: validações, número, preços fixados e reserva do estoque.
+
+<p align="center">
+  <a href="docs/assets/diagrama-registro-pedido.png"><img src="docs/assets/diagrama-registro-pedido.png" alt="Fluxograma do registro do pedido" width="900"></a>
+</p>
+
+### Efetuar Pagamento
+
+Diálogo com máscara, validação dos dados do cartão, transição atômica de status e gravação só do
+resultado seguro.
+
+<p align="center">
+  <a href="docs/assets/diagrama-efetuar-pagamento.png"><img src="docs/assets/diagrama-efetuar-pagamento.png" alt="Fluxograma do Efetuar Pagamento" width="900"></a>
+</p>
+
+### Aprovação do pedido
+
+Transição atômica para `FINALIZADO`, baixa do estoque e snapshots.
+
+<p align="center">
+  <a href="docs/assets/diagrama-aprovacao-pedido.png"><img src="docs/assets/diagrama-aprovacao-pedido.png" alt="Fluxograma da aprovação do pedido" width="900"></a>
+</p>
+
+### Cancelamento e reembolso
+
+Cancelamento direto (sem pagamento aprovado) ou solicitação de reembolso decidida na Gestão de
+Reembolsos.
+
+<p align="center">
+  <a href="docs/assets/diagrama-cancelamento-reembolso.png"><img src="docs/assets/diagrama-cancelamento-reembolso.png" alt="Fluxograma do cancelamento do pedido e do reembolso" width="900"></a>
+</p>
+
+### Endereço do cliente: consulta de CEP
+
+Reaproveitamento de CEP já validado, consulta ao ViaCEP, CEP geral e validações do Save.
+
+<p align="center">
+  <a href="docs/assets/diagrama-endereco-cep.png"><img src="docs/assets/diagrama-endereco-cep.png" alt="Fluxograma da consulta de CEP do endereço do cliente" width="900"></a>
+</p>
+
+### Importação por planilha
+
+Validação de todas as linhas antes de gravar (tudo ou nada).
+
+<p align="center">
+  <a href="docs/assets/diagrama-importacao-planilha.png"><img src="docs/assets/diagrama-importacao-planilha.png" alt="Fluxograma da importação em massa por planilha" width="900"></a>
+</p>
 
 ---
 
@@ -287,7 +368,8 @@ stateDiagram-v2
 │   └── tsconfig.json, tsconfig.cdsbuild.json
 │
 ├── docs/
-│   ├── assets/                        imagens usadas neste README
+│   ├── assets/                        imagens usadas neste README (capturas e diagramas)
+│   ├── arquitetura-e-processos.drawio arquitetura e fluxogramas (draw.io)
 │   ├── modelos-importacao/            modelos de planilha (.xlsx e .csv)
 │   ├── especificacao-tecnica.md       especificação técnica (Markdown)
 │   └── especificacao-tecnica.docx     especificação técnica (Word)
@@ -639,6 +721,7 @@ o botão *Abrir gestão* navega para a app de gestão do domínio.
 
 | Versão | Mudanças |
 | --- | --- |
+| v1.8 | Diagramas no draw.io com as formas oficiais da SAP (`docs/arquitetura-e-processos.drawio`): arquitetura, ciclo de vida do pedido e fluxogramas do registro, pagamento, aprovação, cancelamento e reembolso, consulta de CEP e importação por planilha, exportados como imagens em `docs/assets` e exibidos neste README |
 | v1.7 | Concorrência nas ações do pedido: pagar, aprovar e cancelar o pedido e decidir o reembolso começam por um `UPDATE` condicional ao status lido (`transicionarPedido` em `srv/lib/pedidos`), que também bloqueia o pedido até o fim da transação; a ação que perde a corrida é recusada com `PEDIDO_ALTERADO_CONCORRENTE` (ou `REEMBOLSO_STATUS_INVALIDO`) sem liberar a reserva de novo, baixar estoque ou gravar pagamento (antes, um segundo cancelamento simultâneo liberava a reserva de outros pedidos); o Save da edição do pedido também confere o status; pagar e aprovar passam para `srv/lib/pedidos` (`efetuarPagamento` e `finalizarPedido`); `.vscode` de cada implementação igual ao gerado pelo `cds init` (como no SAP Business Application Studio): depuração *cds serve* e tarefa *cds watch*; 72 testes em JavaScript e 74 em TypeScript; especificação técnica 2.4 |
 | v1.6 | Revisão do código: comentários explicam só a aplicação CAP e todas as funções foram documentadas (JSDoc/TSDoc); READMEs e especificação técnica 2.3 (.md e .docx) sem as comparações com o projeto RAP, mantido só o link para o repositório dele; singleton `Permissoes` esconde Criar, Editar, Excluir, Importar e *Definir como principal* do usuário só de consulta em Clientes e Estoque; ações do pedido chamadas no rascunho devolvem 409 (`ACAO_SOMENTE_ATIVO`) em vez de 501; importação de estoque recusa nome já cadastrado sem diferenciar maiúsculas; leitor de `.xlsx` limita o conteúdo descompactado a 50 MB; `package-lock.json` da versão TypeScript atualizado (`@sap/cds-dk` 10.1.2); 71 testes em JavaScript e 73 em TypeScript |
 | v1.5 | Análises divididas em quatro apps (Análise de Pedidos de Compras, de Clientes, de Itens do Estoque e de Pedidos de Reembolsos), com tiles próprios no launchpad e testes QUnit corrigidos; máscara de digitação no diálogo *Efetuar Pagamento*; navegações das Object Pages completadas (pedido → reembolso, histórico do cliente e dos itens → apps de origem, Object Page do item no encerramento); especificação técnica 2.2 |
@@ -657,6 +740,8 @@ o botão *Abrir gestão* navega para a app de gestão do domínio.
 - [README da implementação JavaScript](nodejs-padrao/README.md).
 - [README da implementação TypeScript](nodejs-typescript/README.md).
 - [Modelos de importação](docs/modelos-importacao).
+- [Arquitetura e fluxogramas dos processos](docs/arquitetura-e-processos.drawio) (draw.io, formas oficiais da SAP);
+  as imagens estão em [Arquitetura](#arquitetura) e [Diagramas dos processos](#diagramas-dos-processos).
 - Aplicação em SAP RAP / ABAP Cloud: [sap-abap-rap-pedidos-de-compras-app](https://github.com/AdrianoBispo/sap-abap-rap-pedidos-de-compras-app).
 
 ---
