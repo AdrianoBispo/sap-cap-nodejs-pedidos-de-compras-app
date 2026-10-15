@@ -31,17 +31,18 @@ modelo CDS pelo **cds-typer**.
 | Linguagem | TypeScript 6.0 (`strict`, `noUnusedLocals`, `module: NodeNext`) |
 | Tipos | `@cap-js/cds-typer` (classes geradas em `@cds-models`) e `@cap-js/cds-types` (API do CAP) |
 | Execução | `tsx` em desenvolvimento e testes; `tsc` no `cds build` (JavaScript em `gen/srv`) |
-| Banco | SQLite em memória (`@cap-js/sqlite`) — SAP HANA Cloud fica para a implantação |
+| Banco | SQLite em arquivo (`@cap-js/sqlite`, `db.sqlite`) em desenvolvimento — SAP HANA Cloud (`@cap-js/hana`, perfil `[production]`) em produção |
 | Serviços | OData V4 com rascunho (draft), `@restrict`, `@assert`/`@mandatory`, `$apply` |
 | Front-end | SAPUI5 1.148 (LTS): Fiori Elements V4 (List Report/Object Page) e apps freestyle, `cds-plugin-ui5` |
 | Integração | ViaCEP (`fetch` nativo, URL em `cds.requires.viacep`) |
-| Qualidade | `node:test` + `@cap-js/cds-test` (74 testes), ESLint 10 + `typescript-eslint`, `tsc --noEmit` |
+| Qualidade | `node:test` + `@cap-js/cds-test` (76 testes), ESLint 10 + `typescript-eslint`, `tsc --noEmit` |
 
 ## Como executar
 
 ```sh
 npm install          # instala o CAP, as ferramentas TypeScript e os apps (workspaces app/*)
 npm run watch        # cds-tsx watch: gera @cds-models, serve os .ts com tsx em http://localhost:4004
+npm run db:deploy    # recria o db.sqlite com o modelo e os CSVs (apaga os dados gravados)
 ```
 
 Abra `http://localhost:4004/launchpad.html` (launchpad com os oito tiles) ou a página inicial do
@@ -52,17 +53,21 @@ CAP. Usuários de desenvolvimento (autenticação *mocked*):
 | `admin` | `admin` | `Admin` | Tudo: clientes, estoque, pedidos, reembolsos e análises |
 | `comum` | `comum` | `Comum` | Consulta clientes e estoque (as apps escondem Criar, Editar, Excluir e Importar); cria e opera pedidos; decide reembolsos; análises |
 
-O banco é recriado a cada inicialização com os dados de demonstração de `db/data` (100 clientes,
-100 itens e 100 pedidos em todos os status). Para regenerar os CSVs: `npm run dados:demo`.
+O banco de desenvolvimento é o SQLite em arquivo `db.sqlite` (fora do Git). O `npm run watch` o cria na
+primeira execução, com os dados de demonstração de `db/data` (100 clientes, 100 itens e 100 pedidos
+em todos os status), e depois o mantém entre reinícios, com as fotos e os registros gravados. Para
+regenerar os CSVs: `npm run dados:demo`. Para recriar o banco depois de mudar o modelo ou os CSVs:
+`npm run db:deploy`, que apaga o que foi gravado. Os testes usam um SQLite em memória.
 
 ## Scripts
 
 | Script | O que faz |
 | --- | --- |
-| `npm run watch` | `cds-tsx watch`: servidor com recarga automática executando os `.ts` via `tsx` |
+| `npm run watch` | `cds-tsx watch`: servidor com recarga automática executando os `.ts` via `tsx`; antes, cria o `db.sqlite` se ainda não existir (`scripts/preparar-sqlite.ts`) |
+| `npm run db:deploy` | `cds deploy`: recria o `db.sqlite` com o modelo e os CSVs de `db/data` |
 | `npm run typer` | Gera os tipos do modelo CDS em `@cds-models` (`cds-typer "*"`) |
 | `npm run typecheck` | `typer` + `tsc --noEmit` (verificação de tipos em `srv/`, `test/` e `scripts/`) |
-| `npm test` | `typer` + 74 testes (`node --test` com `tsx`, `CDS_TYPESCRIPT=tsx`), com ViaCEP falso local |
+| `npm test` | `typer` + 76 testes (`node --test` com `tsx`, `CDS_TYPESCRIPT=tsx`), com ViaCEP falso local |
 | `npm run lint` | ESLint (recomendado do CAP + `typescript-eslint`) e `typecheck` |
 | `npm run build` | `cds build --production`: modelo compilado e `tsc` (`tsconfig.cdsbuild.json`) em `gen/srv` |
 | `npm run serve` | `cds-tsx serve`: servidor sem recarga, executando os `.ts` via `tsx` |
@@ -108,15 +113,15 @@ export default class PedidosService extends cds.ApplicationService {
 ## Testes e lint
 
 ```sh
-npm test             # 74 testes (unidade + serviços), com ViaCEP falso local
+npm test             # 76 testes (unidade + serviços), com ViaCEP falso local
 npm run lint         # ESLint + verificação de tipos
 ```
 
 | Arquivo | Cobertura |
 | --- | --- |
 | `test/unidade.test.ts` | CPF, e-mail, telefone, imagens, status de estoque, SKU, pagamento simulado, leitor XLSX/CSV (inclusive o limite do conteúdo descompactado) |
-| `test/clientes.test.ts` | rascunho, ViaCEP, CEP geral, CEP único, endereço principal, CPF, autorização (inclusive `Permissoes`), exclusão, foto |
-| `test/estoque.test.ts` | SKU, disponibilidade e status, concorrência com edição, inativação, exclusão e `Permissoes` |
+| `test/clientes.test.ts` | rascunho, ViaCEP, CEP geral, CEP único, endereço principal, CPF, autorização (inclusive `Permissoes`), exclusão, foto (formato e gravação depois do Save) |
+| `test/estoque.test.ts` | SKU, disponibilidade e status, concorrência com edição, inativação, exclusão, `Permissoes` e foto gravada depois do Save |
 | `test/pedidos.test.ts` | registro com reserva, edição pela diferença, pagamento, aprovação, cancelamento (inclusive ações recusadas no rascunho e ações com o pedido alterado por outra operação), reembolso, campos somente leitura |
 | `test/reembolsos.test.ts` | aprovar, rejeitar (motivo obrigatório), decisão única |
 | `test/importacao.test.ts` | importação de clientes, estoque e pedidos (tudo ou nada), nomes e pedidos já importados recusados e dos modelos em `docs/` |
@@ -142,6 +147,7 @@ nodejs-typescript/
 │   ├── typer.cds                nomes singulares dos tipos gerados (@singular)
 │   └── lib/*.ts                 regras de domínio reutilizáveis
 ├── scripts/gerar-dados-demo.ts  gerador dos CSVs de demonstração
+├── scripts/preparar-sqlite.ts   cria o db.sqlite antes do primeiro watch
 ├── test/                        testes automatizados (.test.ts) e apoio (ViaCEP falso, gerador XLSX)
 ├── tsconfig.json                verificação de tipos (srv, test, scripts)
 ├── tsconfig.cdsbuild.json       compilação de srv/ para gen/srv no cds build
@@ -176,14 +182,14 @@ extensão e encontra o `.d.ts`; em tempo de execução o arquivo `.js` não exis
 pacote normalmente. Apontar direto para o `.d.ts` faria o `tsx` carregar a declaração vazia em vez
 do CAP (`cds.ApplicationService` indefinido).
 
-## SAP HANA Cloud (pendente)
+## SAP HANA Cloud (implantação pendente)
 
-Como na versão JavaScript, a conexão com o SAP HANA Cloud será configurada na implantação:
+Como na versão JavaScript, o `@cap-js/hana` está nas dependências e o perfil `[production]` aponta o
+banco para o SAP HANA Cloud; o `@cap-js/sqlite` fica em `devDependencies`. Para implantar falta:
 
 ```sh
-cds add hana          # adiciona @cap-js/hana e o perfil [production]
 cds add xsuaa,mta     # autenticação e descritor MTA para Cloud Foundry
-npm run build         # cds build --production (inclui a compilação TypeScript)
+npm run build         # cds build --production: gen/srv (com a compilação TypeScript) e gen/db (HDI)
 ```
 
-A execução sobre o SAP HANA Cloud ainda não foi testada.
+A aplicação ainda não foi implantada nem executada sobre o SAP HANA Cloud.
