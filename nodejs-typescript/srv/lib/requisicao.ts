@@ -26,8 +26,17 @@ export function ehRascunho(req: Request): boolean {
 }
 
 /**
+ * Leitura em andamento ou concluída de cada stream de upload. Um stream só pode
+ * ser lido uma vez, e os handlers before de um mesmo evento rodam em paralelo:
+ * sem isso, dois handlers lendo a mesma mídia dividiriam os bytes entre si e o
+ * último a terminar gravaria uma foto vazia.
+ */
+const leituras = new WeakMap<object, Promise<Buffer>>()
+
+/**
  * Lê o conteúdo de um upload para um Buffer: Buffer, texto base64 (actions
- * de importação), stream (mídia enviada por PUT) ou bytes.
+ * de importação), stream (mídia enviada por PUT) ou bytes. O mesmo stream
+ * lido de novo devolve o mesmo Buffer.
  * @param valor conteúdo recebido em req.data
  * @returns null/undefined são devolvidos como vieram
  */
@@ -36,9 +45,17 @@ export async function lerConteudo(valor: unknown): Promise<Buffer | null | undef
   if (Buffer.isBuffer(valor)) return valor
   if (typeof valor === 'string') return Buffer.from(valor, 'base64')
   if (typeof (valor as AsyncIterable<unknown>)[Symbol.asyncIterator] === 'function') {
-    const partes: Buffer[] = []
-    for await (const parte of valor as AsyncIterable<Uint8Array | string>) partes.push(Buffer.isBuffer(parte) ? parte : Buffer.from(parte))
-    return Buffer.concat(partes)
+    const stream = valor as AsyncIterable<Uint8Array | string>
+    let leitura = leituras.get(stream)
+    if (!leitura) leituras.set(stream, (leitura = lerStream(stream)))
+    return leitura
   }
   return Buffer.from(valor as Uint8Array)
+}
+
+/** Junta os pedaços de um stream num Buffer. */
+async function lerStream(stream: AsyncIterable<Uint8Array | string>): Promise<Buffer> {
+  const partes: Buffer[] = []
+  for await (const parte of stream) partes.push(Buffer.isBuffer(parte) ? parte : Buffer.from(parte))
+  return Buffer.concat(partes)
 }

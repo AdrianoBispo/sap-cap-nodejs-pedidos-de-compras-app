@@ -11,6 +11,7 @@ import { iniciarViaCepFalso, type ViaCepFalso } from './viacep-falso.js'
 export interface Opcoes {
   auth: { username: string, password: string }
   headers?: Record<string, string>
+  responseType?: 'arraybuffer'
 }
 
 /**

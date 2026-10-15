@@ -4,7 +4,7 @@
  */
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { iniciarServidor, falha, COMUM } from './apoio/contexto.js'
+import { iniciarServidor, falha, ADMIN, COMUM } from './apoio/contexto.js'
 
 const api = iniciarServidor()
 const E = '/odata/v4/estoque'
@@ -113,5 +113,18 @@ describe('Gestão de Estoque', () => {
     assert.equal(admin.somenteLeitura, false)
     const { data: comum } = await api.get(`${E}/Permissoes`, COMUM)
     assert.equal(comum.somenteLeitura, true)
+  })
+
+  it('foto enviada no rascunho é gravada e exibida depois do Save', async () => {
+    const { data: rascunho } = await api.post(`${E}/Itens`, {})
+    await api.patch(`${E}/Itens${api.chave(rascunho.ID, false)}`, {
+      nome: `Item com foto ${Math.random().toString(36).slice(2, 8)}`, categoria_code: 'ELETRONICOS', precoUnitario: 10, qtdeEstoque: 1
+    })
+    const jpeg = Buffer.concat([Buffer.from('ffd8ffe0', 'hex'), Buffer.alloc(200_000, 3)])
+    const binario = { ...ADMIN, headers: { 'content-type': 'image/jpeg' } }
+    await api.put(`${E}/Itens${api.chave(rascunho.ID, false)}/fotoItem`, jpeg, binario)
+    await api.ativar(E, 'Itens', rascunho.ID)
+    const { data } = await api.get(`${E}/Itens${api.chave(rascunho.ID)}/fotoItem`, { ...binario, responseType: 'arraybuffer' })
+    assert.ok(jpeg.equals(Buffer.from(data)), 'foto gravada com todos os bytes')
   })
 })
