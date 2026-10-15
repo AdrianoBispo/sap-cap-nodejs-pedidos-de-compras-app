@@ -58,9 +58,11 @@ interface ClienteHttp {
  * Sobe o servidor CAP do projeto (cds.test) apontando o ViaCEP para o
  * servidor falso. Devolve atalhos HTTP autenticados (ADMIN por padrão) e
  * do fluxo de rascunho (ativar, editar).
+ * O banco é sempre um SQLite em memória (--in-memory), recriado a cada
+ * execução: os testes não tocam no db.sqlite de desenvolvimento.
  */
 export function iniciarServidor() {
-  const teste = cds.test(join(import.meta.dirname, '..', '..')) as unknown as ClienteHttp
+  const teste = cds.test.in(join(import.meta.dirname, '..', '..')).run('serve', 'all', '--in-memory') as unknown as ClienteHttp
   const viacep = {} as ViaCepFalso
   before(async () => {
     Object.assign(viacep, await iniciarViaCepFalso())
