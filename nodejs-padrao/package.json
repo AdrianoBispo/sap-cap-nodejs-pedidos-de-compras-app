@@ -8,6 +8,7 @@
     "node": ">=22"
   },
   "dependencies": {
+    "@cap-js/hana": "^3",
     "@sap/cds": "^10"
   },
   "devDependencies": {
@@ -20,7 +21,9 @@
   },
   "scripts": {
     "start": "cds-serve",
+    "prewatch": "node scripts/preparar-sqlite.js",
     "watch": "cds watch",
+    "db:deploy": "cds deploy",
     "https": "local-ssl-proxy --source 8443 --target 4004",
     "test": "CDS_PLUGIN_UI5_ACTIVE=false node --test --test-concurrency=1 \"test/**/*.test.js\"",
     "lint": "eslint .",
@@ -57,6 +60,17 @@
           "url": "https://viacep.com.br/ws"
         },
         "timeout": 5000
+      },
+      "[development]": {
+        "db": {
+          "kind": "sqlite",
+          "credentials": {
+            "url": "db.sqlite"
+          }
+        }
+      },
+      "[production]": {
+        "db": "hana"
       }
     }
   },

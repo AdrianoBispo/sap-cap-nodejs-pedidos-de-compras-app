@@ -1,14 +1,15 @@
 # Especificação Técnica — Sistema de Pedidos de Compras (SAP CAP + SAP Fiori)
 
-> **Versão 2.4 — outubro de 2026.** Esta revisão descreve o sistema **como implementado** nas duas
+> **Versão 2.5 — outubro de 2026.** Esta revisão descreve o sistema **como implementado** nas duas
 > versões do repositório: [`nodejs-padrao`](../nodejs-padrao) (JavaScript) e
 > [`nodejs-typescript`](../nodejs-typescript) (TypeScript). As duas compartilham o mesmo modelo CDS,
 > os mesmos serviços, as mesmas aplicações SAPUI5 e a mesma suíte de testes; diferem apenas na
 > linguagem dos handlers (seção 19). A seção 22 resume o que mudou em relação à versão 1 e nas
 > revisões 2.1 (campos somente leitura no pedido, navegação entre apps e importação de pedidos sem
 > duplicidade), 2.2 (análises em quatro apps, máscara no pagamento e navegações das Object Pages),
-> 2.3 (permissões na UI, ações recusadas no rascunho e proteções na importação) e 2.4 (transições de
-> status atômicas nas ações do pedido).
+> 2.3 (permissões na UI, ações recusadas no rascunho e proteções na importação), 2.4 (transições de
+> status atômicas nas ações do pedido) e 2.5 (fotos gravadas corretamente, SQLite em arquivo no
+> desenvolvimento e SAP HANA Cloud configurado para produção).
 
 ---
 
@@ -38,8 +39,8 @@ A versão da aplicação em SAP RAP / ABAP Cloud está em
 |---|---|---|
 | Backend | SAP CAP 10 (`@sap/cds` 10) em Node.js 22+, módulos ESM | Implementado |
 | Linguagem | JavaScript (`nodejs-padrao`) ou TypeScript 6.0 `strict` com cds-typer (`nodejs-typescript`) | Implementado |
-| Banco local | SQLite em memória (`@cap-js/sqlite`), recriado a cada inicialização | Implementado |
-| Banco produtivo | SAP HANA Cloud | Pendente (seção 21) |
+| Banco local | SQLite em arquivo (`@cap-js/sqlite`, `db.sqlite`) no perfil `[development]`, criado no primeiro `npm run watch` e mantido entre reinícios; testes em SQLite em memória | Implementado |
+| Banco produtivo | SAP HANA Cloud (`@cap-js/hana`, perfil `[production]`) | Configurado; implantação pendente (seção 23) |
 | Protocolo | OData V4 com rascunho (draft), `$apply` para análises | Implementado |
 | Frontend | SAPUI5 1.148 (LTS): 4 apps Fiori Elements V4 (List Report/Object Page) + 4 apps freestyle de análise | Implementado |
 | Servidor das apps | `cds-plugin-ui5` (apps servidas pelo próprio CAP) | Implementado |
@@ -47,7 +48,7 @@ A versão da aplicação em SAP RAP / ABAP Cloud está em
 | Integração | ViaCEP via `fetch` nativo (URL em `cds.requires.viacep`) | Implementado |
 | Segurança | Autenticação *mocked* com papéis `Admin`/`Comum`; XSUAA na implantação | Mocked implementado; XSUAA pendente |
 | Deploy | Cloud Foundry / MTA (`mta.yaml`) | Pendente |
-| Qualidade | `node:test` + `@cap-js/cds-test` (72 testes em JavaScript, 74 em TypeScript), ESLint 10 | Implementado |
+| Qualidade | `node:test` + `@cap-js/cds-test` (74 testes em JavaScript, 76 em TypeScript), ESLint 10 | Implementado |
 
 ---
 
@@ -996,6 +997,7 @@ O repositório mantém duas implementações completas e equivalentes da mesma a
 | Lint | ESLint (recomendado do CAP) | ESLint + `typescript-eslint` + `tsc --noEmit` |
 | Build | `cds build` copia os `.js` | `cds build` compila com `tsc` (`tsconfig.cdsbuild.json`) para `gen/srv` |
 | Gerador de dados | `scripts/gerar-dados-demo.js` | `scripts/gerar-dados-demo.ts` (gera os mesmos CSVs) |
+| Criação do banco local | `scripts/preparar-sqlite.js` (`prewatch`) | `scripts/preparar-sqlite.ts` (`prewatch`, via `tsx`) |
 | Modelo CDS, apps (inclusive `webapp/ext` e testes QUnit), dados, i18n | — | Idênticos |
 
 Regra de manutenção: qualquer mudança de regra de negócio deve ser feita nas duas versões, com o
@@ -1006,13 +1008,14 @@ teste correspondente nas duas suítes.
 | Ação | `nodejs-padrao` | `nodejs-typescript` |
 |---|---|---|
 | Instalar | `npm install` | `npm install` |
-| Executar | `npm run watch` | `npm run watch` |
+| Executar | `npm run watch` (cria o `db.sqlite` se não existir) | `npm run watch` (idem) |
+| Recriar o banco local | `npm run db:deploy` | `npm run db:deploy` |
 | Testar | `npm test` | `npm test` |
 | Lint | `npm run lint` | `npm run lint` (inclui verificação de tipos) |
 | Gerar tipos | — | `npm run typer` |
 | Build de produção | `cds build --production` | `npm run build` |
 | Regenerar dados | `npm run dados:demo` | `npm run dados:demo` |
-| Depurar (VS Code / BAS) | Configuração *cds serve* (`cds serve --with-mocks --in-memory?`) | Idem (o `cds serve` carrega os handlers `.ts`) |
+| Depurar (VS Code / BAS) | Configuração *cds serve* (`cds serve --with-mocks --in-memory?`, que usa o `db.sqlite` configurado; crie-o antes com `npm run watch` ou `npm run db:deploy`) | Idem (o `cds serve` carrega os handlers `.ts`) |
 
 O `.vscode` de cada implementação é o gerado pelo `cds init`, o mesmo que o SAP Business Application
 Studio cria num projeto CAP: a configuração de depuração *cds serve* (`launch.json`), a tarefa
@@ -1023,15 +1026,15 @@ Studio cria num projeto CAP: a configuração de depuração *cds serve* (`launc
 
 ## 20. Testes Automatizados
 
-72 testes na versão JavaScript e 74 na TypeScript (`node:test` + `@cap-js/cds-test`), com um
-servidor ViaCEP falso local (sem rede externa) e um gerador de `.xlsx` mínimo. São permanentes:
+74 testes na versão JavaScript e 76 na TypeScript (`node:test` + `@cap-js/cds-test`), sempre num
+SQLite em memória (`--in-memory`, sem tocar no `db.sqlite`), com um servidor ViaCEP falso local (sem rede externa) e um gerador de `.xlsx` mínimo. São permanentes:
 devem ser mantidos e ajustados junto com as regras de negócio.
 
 | Arquivo | Cobertura |
 |---|--- |
 | `unidade.test` | CPF, e-mail, telefone, imagens, status de estoque, SKU, pagamento simulado, leitor XLSX/CSV (inclusive o limite do conteúdo descompactado) |
-| `clientes.test` | Rascunho, ViaCEP, CEP geral, CEP único, endereço principal, CPF, autorização (inclusive `Permissoes`), exclusão, foto |
-| `estoque.test` | SKU, disponibilidade e status, concorrência com edição, inativação, exclusão e `Permissoes` |
+| `clientes.test` | Rascunho, ViaCEP, CEP geral, CEP único, endereço principal, CPF, autorização (inclusive `Permissoes`), exclusão, foto (formato e gravação depois do Save) |
+| `estoque.test` | SKU, disponibilidade e status, concorrência com edição, inativação, exclusão, `Permissoes` e foto gravada depois do Save |
 | `pedidos.test` | Registro com reserva, edição pela diferença, pagamento, aprovação, cancelamento (inclusive ações recusadas no rascunho e ações com o pedido alterado por outra operação), reembolso, campos somente leitura (cliente e pagamento) |
 | `reembolsos.test` | Aprovar, rejeitar (motivo obrigatório), decisão única |
 | `importacao.test` | Clientes, estoque e pedidos (tudo ou nada), nomes e pedidos já importados recusados e modelos de `docs/` |
@@ -1083,6 +1086,7 @@ Estrutura de cada implementação (as diferenças estão marcadas):
 │   ├── typer.cds                     (só TypeScript) nomes dos tipos gerados
 │   └── lib/                          regras de domínio
 ├── scripts/gerar-dados-demo.js | .ts gerador dos CSVs de demonstração
+├── scripts/preparar-sqlite.js | .ts  cria o db.sqlite antes do primeiro watch
 ├── test/                             testes automatizados e apoio
 ├── tsconfig*.json                    (só TypeScript) verificação de tipos e build
 └── package.json
@@ -1155,15 +1159,25 @@ Estrutura de cada implementação (as diferenças estão marcadas):
 | Pagar e aprovar | Regras no handler do serviço | Em `srv/lib/pedidos` (`efetuarPagamento`, `finalizarPedido`), como o cancelamento (seção 7.2) |
 | Testes | 71 (JavaScript) e 73 (TypeScript) | 72 (JavaScript) e 74 (TypeScript) |
 
+### 22.6 Revisão 2.5
+
+| Tema | Versão 2.4 | Versão 2.5 |
+|---|---|---|
+| Upload de foto (cliente e item) | Só o MIME era gravado: a validação da foto roda em dois handlers *before* do mesmo evento, em paralelo, e os dois liam o mesmo stream; um deles ficava sem bytes e gravava a foto vazia | `lerConteudo` (`srv/lib/requisicao`) lê cada stream uma vez só e devolve o mesmo conteúdo às duas chamadas; a foto é gravada inteira |
+| Banco de desenvolvimento | SQLite em memória, recriado a cada reinício do `cds watch` | SQLite em arquivo (`db.sqlite`) no perfil `[development]`, criado no primeiro `npm run watch` e mantido entre reinícios; `npm run db:deploy` recria |
+| Banco de produção | Não configurado | `@cap-js/hana` nas dependências e perfil `[production]` com o SAP HANA Cloud; `@cap-js/sqlite` só em `devDependencies` |
+| Testes | 72 (JavaScript) e 74 (TypeScript) | 74 (JavaScript) e 76 (TypeScript), em SQLite em memória |
+
 ---
 
 ## 23. Pendências e Backlog
 
 **Implantação (pendente)**
 
-- SAP HANA Cloud: `cds add hana` e perfil `[production]`. O modelo usa apenas funções portáveis do
-  CAP (`substring`, `length`, `year`, `month`, `case`) e colunas geradas, suportadas pelo HANA, mas
-  a execução no HANA ainda não foi testada.
+- SAP HANA Cloud: o `@cap-js/hana` e o perfil `[production]` já estão configurados, e o
+  `cds build --production` gera os artefatos HDI. O modelo usa apenas funções portáveis do CAP
+  (`substring`, `length`, `year`, `month`, `case`) e colunas geradas, suportadas pelo HANA, mas a
+  aplicação ainda não foi implantada nem executada no HANA Cloud.
 - XSUAA (`xs-security.json` com os papéis `Admin` e `Comum`) e *role collections* na SAP BTP.
 - Descritor MTA (`cds add mta`) e deploy no Cloud Foundry.
 - Exposição das apps no SAP Build Work Zone.

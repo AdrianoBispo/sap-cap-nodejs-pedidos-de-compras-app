@@ -19,7 +19,7 @@
   <img src="https://img.shields.io/badge/SQLite-dev-003B57?style=for-the-badge&logo=sqlite&logoColor=white" alt="SQLite">
   <img src="https://img.shields.io/badge/API-ViaCEP-2E7D32?style=for-the-badge" alt="API ViaCEP">
   <br>
-  <img src="https://img.shields.io/badge/testes-72%20JS%20%7C%2074%20TS-9C3493?style=for-the-badge" alt="72 testes em JavaScript e 74 em TypeScript">
+  <img src="https://img.shields.io/badge/testes-74%20JS%20%7C%2076%20TS-9C3493?style=for-the-badge" alt="74 testes em JavaScript e 76 em TypeScript">
   <img src="https://img.shields.io/badge/ESLint-10-4B32C3?style=for-the-badge&logo=eslint&logoColor=white" alt="ESLint 10">
   <img src="https://img.shields.io/github/last-commit/AdrianoBispo/sap-cap-nodejs-pedidos-de-compras-app?style=for-the-badge" alt="Último commit">
   <img src="https://img.shields.io/github/repo-size/AdrianoBispo/sap-cap-nodejs-pedidos-de-compras-app?style=for-the-badge" alt="Tamanho do repositório">
@@ -88,8 +88,9 @@ regras de domínio, dos testes e dos scripts.
 | Análise de Pedidos de Reembolsos | Indicadores e 5 gráficos dos reembolsos (status, mês, UF, motivo) | `AnaliticoService` |
 
 > [!NOTE]
-> Em desenvolvimento o banco é **SQLite em memória**, recriado a cada inicialização com os dados de
-> demonstração. A conexão com o **SAP HANA Cloud** fica para a implantação (ver
+> Em desenvolvimento o banco é **SQLite em arquivo** (`db.sqlite`), criado na primeira execução com os
+> dados de demonstração e mantido entre reinícios. Em produção o perfil `[production]` usa o
+> **SAP HANA Cloud** (`@cap-js/hana`); a implantação ainda é pendente (ver
 > [Limitações conhecidas e pendências](#limitações-conhecidas-e-pendências)).
 
 ---
@@ -173,12 +174,12 @@ regras de domínio, dos testes e dos scripts.
 | --- | --- |
 | Runtime | Node.js 22+, `@sap/cds` 10 (módulos ESM) |
 | Linguagem | JavaScript (`nodejs-padrao`) e TypeScript 6 `strict` com `@cap-js/cds-typer` e `tsx` (`nodejs-typescript`) |
-| Banco | SQLite em memória (`@cap-js/sqlite`) em desenvolvimento; SAP HANA Cloud na implantação (pendente) |
+| Banco | SQLite em arquivo (`@cap-js/sqlite`, `db.sqlite`) em desenvolvimento; SAP HANA Cloud (`@cap-js/hana`, perfil `[production]`) em produção, implantação pendente |
 | Serviços | OData V4 com rascunho (draft), `@restrict`, `@assert`/`@mandatory`, side effects, `$apply` |
 | Front-end | SAPUI5 1.148 (LTS): Fiori Elements V4 (List Report + Object Page) e apps freestyle, servidos pelo `cds-plugin-ui5` |
 | Integração | ViaCEP via `fetch` nativo (URL em `cds.requires.viacep`) |
 | Ferramentas | `@sap/cds-dk` 10, SAP Fiori tools (geração das apps), UI5 linter, ESLint 10, `local-ssl-proxy` (HTTPS local) |
-| Testes | `node:test` + `@cap-js/cds-test` (72 testes em JavaScript, 74 em TypeScript), ViaCEP falso local |
+| Testes | `node:test` + `@cap-js/cds-test` (74 testes em JavaScript, 76 em TypeScript), ViaCEP falso local |
 
 ---
 
@@ -265,7 +266,8 @@ localmente com SQLite e autenticação *mocked*.
   - a autenticação é delegada ao SAP ID service ou ao Identity Authentication (SAP Cloud Identity Services).
 - **API ViaCEP**: serviço externo. A URL vem da variável `cds_requires_viacep_credentials_url`.
 - **Implantação**:
-  1. `cds add hana,xsuaa,html5-repo,workzone,mta` gera o `mta.yaml`;
+  1. `cds add xsuaa,html5-repo,workzone,mta` gera o `mta.yaml` (o `@cap-js/hana` e o perfil
+     `[production]` já estão configurados);
   2. `mbt build` monta o pacote;
   3. `cf deploy` implanta o serviço, o db-deployer, as apps e as instâncias de serviço.
 
@@ -387,12 +389,14 @@ Validação de todas as linhas antes de gravar (tudo ou nada).
 │   │   ├── validacoes.cds             @mandatory / @assert
 │   │   └── lib/                       regras de domínio reutilizáveis
 │   ├── scripts/gerar-dados-demo.js    gerador dos CSVs de demonstração
+│   ├── scripts/preparar-sqlite.js     cria o db.sqlite antes do primeiro watch
 │   └── test/                          testes automatizados
 │
 ├── nodejs-typescript/                 implementação em TypeScript (mesma estrutura)
 │   ├── srv/*.ts, srv/lib/*.ts         handlers e regras tipados com #cds-models/*
 │   ├── test/*.test.ts                 testes em TypeScript
 │   ├── scripts/gerar-dados-demo.ts
+│   ├── scripts/preparar-sqlite.ts
 │   └── tsconfig.json, tsconfig.cdsbuild.json
 │
 ├── docs/
@@ -443,9 +447,14 @@ npm run watch            # serviços + apps em http://localhost:4004
 ```
 
 Abra `http://localhost:4004/launchpad.html` (launchpad com os oito tiles) ou a página inicial do
-CAP, que lista serviços e apps. O banco SQLite em memória é recriado a cada inicialização com os dados
-de `db/data`: 100 clientes, 100 itens e 100 pedidos em todos os status. Para regenerar os CSVs:
-`npm run dados:demo`.
+CAP, que lista serviços e apps.
+
+O banco de desenvolvimento é um **SQLite em arquivo** (`db.sqlite`, fora do Git). Na primeira
+execução, o `npm run watch` cria o arquivo com `cds deploy`, carregando os dados de `db/data`: 100
+clientes, 100 itens e 100 pedidos em todos os status. Depois disso os dados, inclusive as fotos
+enviadas, ficam gravados entre reinícios. Depois de mudar o modelo CDS ou os CSVs
+(`npm run dados:demo` os regenera), recrie o banco com `npm run db:deploy`; isso apaga o que foi
+gravado. Os testes usam sempre um SQLite em memória e não tocam no `db.sqlite`.
 
 Para testar em **HTTPS** local (ex.: recursos do navegador que exigem contexto seguro), deixe o
 `watch` rodando e, em outro terminal, execute `npm run https`: o `local-ssl-proxy` publica
@@ -464,8 +473,9 @@ Autenticação *mocked* do CAP:
 
 | Script | JavaScript | TypeScript |
 | --- | --- | --- |
-| `npm run watch` | `cds watch` | `cds-tsx watch` (executa os `.ts` com `tsx`) |
-| `npm test` | 72 testes (`node --test`) | `typer` + 74 testes (`node --import tsx --test`) |
+| `npm run watch` | `cds watch` (cria o `db.sqlite` se ainda não existir) | `cds-tsx watch` (executa os `.ts` com `tsx`; cria o `db.sqlite` se ainda não existir) |
+| `npm run db:deploy` | Recria o `db.sqlite` com o modelo e os CSVs | Recria o `db.sqlite` com o modelo e os CSVs |
+| `npm test` | 74 testes (`node --test`), em SQLite em memória | `typer` + 76 testes (`node --import tsx --test`), em SQLite em memória |
 | `npm run lint` | ESLint | ESLint + `typecheck` |
 | `npm run typecheck` | — | `cds-typer` + `tsc --noEmit` |
 | `npm run build` | — | `cds build --production` (JavaScript em `gen/srv`) |
@@ -558,13 +568,13 @@ npm test         # em nodejs-padrao ou nodejs-typescript
 
 Os testes sobem o servidor com `cds.test`, usam um **ViaCEP falso local** (sem rede externa) e um
 gerador mínimo de `.xlsx`. **São permanentes**: devem ser mantidos e ajustados junto com as regras
-de negócio. São 72 testes em JavaScript e 74 em TypeScript, todos passando:
+de negócio. São 74 testes em JavaScript e 76 em TypeScript, todos passando:
 
 | Arquivo | Cobre |
 | --- | --- |
 | `unidade.test` | CPF, e-mail, telefone, imagens, status de estoque, SKU, pagamento simulado, leitor XLSX/CSV (inclusive o limite do conteúdo descompactado) |
-| `clientes.test` | Rascunho, ViaCEP, CEP geral, CEP único, endereço principal, CPF, autorização (inclusive `Permissoes`), exclusão, foto |
-| `estoque.test` | SKU, disponibilidade e status, concorrência com edição, inativação, exclusão e `Permissoes` |
+| `clientes.test` | Rascunho, ViaCEP, CEP geral, CEP único, endereço principal, CPF, autorização (inclusive `Permissoes`), exclusão, foto (formato e gravação depois do Save) |
+| `estoque.test` | SKU, disponibilidade e status, concorrência com edição, inativação, exclusão, `Permissoes` e foto gravada depois do Save |
 | `pedidos.test` | Registro com reserva, edição pela diferença, pagamento, aprovação, cancelamento (inclusive ações recusadas no rascunho e ações com o pedido alterado por outra operação), reembolso, campos somente leitura |
 | `reembolsos.test` | Aprovar, rejeitar (motivo obrigatório), decisão única |
 | `importacao.test` | Clientes, estoque e pedidos (tudo ou nada), nomes e pedidos já importados recusados e os modelos de `docs/modelos-importacao` |
@@ -735,9 +745,10 @@ o botão *Abrir gestão* navega para a app de gestão do domínio.
 
 ## Limitações conhecidas e pendências
 
-- **SAP HANA Cloud**: a conexão fica para a implantação (`cds add hana`, `cds add xsuaa,mta`). O
-  modelo usa funções portáveis do CAP e colunas geradas suportadas pelo HANA, mas a execução sobre o
-  HANA Cloud ainda não foi testada.
+- **SAP HANA Cloud**: o `@cap-js/hana` e o perfil `[production]` já estão configurados, e o
+  `cds build --production` gera os artefatos HDI. O modelo usa funções portáveis do CAP e colunas
+  geradas suportadas pelo HANA, mas a aplicação ainda não foi implantada nem executada sobre o HANA
+  Cloud; faltam `cds add xsuaa,mta` e o deploy.
 - **Autenticação de produção** (XSUAA/IAS) e descritor MTA ainda não configurados; em desenvolvimento
   a autenticação é *mocked*. A arquitetura alvo está em
   [Arquitetura na SAP BTP (implantação)](#arquitetura-na-sap-btp-implantação).
@@ -750,6 +761,7 @@ o botão *Abrir gestão* navega para a app de gestão do domínio.
 
 | Versão | Mudanças |
 | --- | --- |
+| v1.9 | Foto do cliente e do item gravada vazia no upload: dois handlers liam o mesmo stream ao mesmo tempo e um deles gravava um conteúdo vazio; agora a leitura de cada stream é feita uma vez só (`lerConteudo` em `srv/lib/requisicao`). Banco: SQLite em arquivo (`db.sqlite`) no perfil `[development]`, criado no primeiro `npm run watch` e mantido entre reinícios (`npm run db:deploy` recria); `@cap-js/hana` nas dependências e perfil `[production]` com o SAP HANA Cloud; testes em SQLite em memória; 74 testes em JavaScript e 76 em TypeScript; especificação técnica 2.5 |
 | v1.8 | Diagramas no draw.io com as formas oficiais da SAP (`docs/arquitetura-e-processos.drawio`): arquitetura, arquitetura alvo na SAP BTP (SAP HANA Cloud, XSUAA e Cloud Foundry), ciclo de vida do pedido e fluxogramas do registro, pagamento, aprovação, cancelamento e reembolso, consulta de CEP e importação por planilha, exportados como imagens em `docs/assets` e exibidos neste README |
 | v1.7 | Concorrência nas ações do pedido: pagar, aprovar e cancelar o pedido e decidir o reembolso começam por um `UPDATE` condicional ao status lido (`transicionarPedido` em `srv/lib/pedidos`), que também bloqueia o pedido até o fim da transação; a ação que perde a corrida é recusada com `PEDIDO_ALTERADO_CONCORRENTE` (ou `REEMBOLSO_STATUS_INVALIDO`) sem liberar a reserva de novo, baixar estoque ou gravar pagamento (antes, um segundo cancelamento simultâneo liberava a reserva de outros pedidos); o Save da edição do pedido também confere o status; pagar e aprovar passam para `srv/lib/pedidos` (`efetuarPagamento` e `finalizarPedido`); `.vscode` de cada implementação igual ao gerado pelo `cds init` (como no SAP Business Application Studio): depuração *cds serve* e tarefa *cds watch*; 72 testes em JavaScript e 74 em TypeScript; especificação técnica 2.4 |
 | v1.6 | Revisão do código: comentários explicam só a aplicação CAP e todas as funções foram documentadas (JSDoc/TSDoc); READMEs e especificação técnica 2.3 (.md e .docx) sem as comparações com o projeto RAP, mantido só o link para o repositório dele; singleton `Permissoes` esconde Criar, Editar, Excluir, Importar e *Definir como principal* do usuário só de consulta em Clientes e Estoque; ações do pedido chamadas no rascunho devolvem 409 (`ACAO_SOMENTE_ATIVO`) em vez de 501; importação de estoque recusa nome já cadastrado sem diferenciar maiúsculas; leitor de `.xlsx` limita o conteúdo descompactado a 50 MB; `package-lock.json` da versão TypeScript atualizado (`@sap/cds-dk` 10.1.2); 71 testes em JavaScript e 73 em TypeScript |

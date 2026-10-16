@@ -8,6 +8,7 @@
     "node": ">=22"
   },
   "dependencies": {
+    "@cap-js/hana": "^3",
     "@sap/cds": "^10"
   },
   "devDependencies": {
@@ -26,7 +27,9 @@
   },
   "scripts": {
     "start": "cds-serve",
+    "prewatch": "tsx scripts/preparar-sqlite.ts",
     "watch": "cds-tsx watch",
+    "db:deploy": "cds deploy",
     "https": "local-ssl-proxy --source 8443 --target 4004",
     "serve": "cds-tsx serve",
     "typer": "cds-typer \"*\" --outputDirectory @cds-models",
@@ -71,6 +74,17 @@
           "url": "https://viacep.com.br/ws"
         },
         "timeout": 5000
+      },
+      "[development]": {
+        "db": {
+          "kind": "sqlite",
+          "credentials": {
+            "url": "db.sqlite"
+          }
+        }
+      },
+      "[production]": {
+        "db": "hana"
       }
     }
   },

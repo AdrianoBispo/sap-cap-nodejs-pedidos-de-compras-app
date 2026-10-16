@@ -149,6 +149,16 @@ describe('Gestão de Clientes', () => {
     const erro = await falha(api.put(`${C}/Clientes${api.chave(ID, false)}/fotoCliente`, falsa, { ...ADMIN_BINARIO('image/png') }))
     assert.match(erro.message, /Formato de imagem inválido/)
   })
+
+  it('foto enviada no rascunho é gravada e exibida depois do Save', async () => {
+    const { ID } = await rascunhoCliente()
+    // maior que um pedaço do stream (64 KB), como uma foto real
+    const png = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.alloc(200_000, 7)])
+    await api.put(`${C}/Clientes${api.chave(ID, false)}/fotoCliente`, png, { ...ADMIN_BINARIO('image/png') })
+    await api.ativar(C, 'Clientes', ID)
+    const { data } = await api.get(`${C}/Clientes${api.chave(ID)}/fotoCliente`, { ...ADMIN_BINARIO('image/png'), responseType: 'arraybuffer' })
+    assert.ok(png.equals(Buffer.from(data)), 'foto gravada com todos os bytes')
+  })
 })
 
 function ADMIN_BINARIO(tipo) {

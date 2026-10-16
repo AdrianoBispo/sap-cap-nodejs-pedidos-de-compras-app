@@ -28,17 +28,18 @@ quatro freestyle de análise) servidas pelo próprio CAP.
 | Camada | Tecnologia |
 | --- | --- |
 | Runtime | Node.js 22+, `@sap/cds` 10, módulos ESM |
-| Banco | SQLite em memória (`@cap-js/sqlite`) — SAP HANA Cloud fica para a implantação |
+| Banco | SQLite em arquivo (`@cap-js/sqlite`, `db.sqlite`) em desenvolvimento — SAP HANA Cloud (`@cap-js/hana`, perfil `[production]`) em produção |
 | Serviços | OData V4 com rascunho (draft), `@restrict`, `@assert`/`@mandatory`, `$apply` |
 | Front-end | SAPUI5 1.148 (LTS): Fiori Elements V4 (List Report/Object Page) e apps freestyle, `cds-plugin-ui5` |
 | Integração | ViaCEP (`fetch` nativo, URL em `cds.requires.viacep`) |
-| Qualidade | `node:test` + `@cap-js/cds-test` (72 testes), ESLint 10, UI5 linter |
+| Qualidade | `node:test` + `@cap-js/cds-test` (74 testes), ESLint 10, UI5 linter |
 
 ## Como executar
 
 ```sh
 npm install          # instala o CAP e as dependências dos apps (workspaces app/*)
 npm run watch        # cds watch: serviços + apps em http://localhost:4004
+npm run db:deploy    # recria o db.sqlite com o modelo e os CSVs (apaga os dados gravados)
 ```
 
 Abra `http://localhost:4004/launchpad.html` (launchpad com os oito tiles) ou a página inicial do
@@ -49,13 +50,16 @@ CAP. Usuários de desenvolvimento (autenticação *mocked*):
 | `admin` | `admin` | `Admin` | Tudo: clientes, estoque, pedidos, reembolsos e análises |
 | `comum` | `comum` | `Comum` | Consulta clientes e estoque (as apps escondem Criar, Editar, Excluir e Importar); cria e opera pedidos; decide reembolsos; análises |
 
-O banco é recriado a cada inicialização com os dados de demonstração de `db/data` (100 clientes,
-100 itens e 100 pedidos em todos os status). Para regenerar os CSVs: `npm run dados:demo`.
+O banco de desenvolvimento é o SQLite em arquivo `db.sqlite` (fora do Git). O `npm run watch` o cria na
+primeira execução, com os dados de demonstração de `db/data` (100 clientes, 100 itens e 100 pedidos
+em todos os status), e depois o mantém entre reinícios, com as fotos e os registros gravados. Para
+regenerar os CSVs: `npm run dados:demo`. Para recriar o banco depois de mudar o modelo ou os CSVs:
+`npm run db:deploy`, que apaga o que foi gravado. Os testes usam um SQLite em memória.
 
 ## Testes e lint
 
 ```sh
-npm test             # 72 testes (unidade + serviços), com ViaCEP falso local
+npm test             # 74 testes (unidade + serviços), com ViaCEP falso local
 npm run lint         # ESLint (configuração recomendada do CAP)
 ```
 
@@ -64,8 +68,8 @@ Os testes são permanentes: devem ser mantidos e ajustados junto com as regras d
 | Arquivo | Cobertura |
 | --- | --- |
 | `test/unidade.test.js` | CPF, e-mail, telefone, imagens, status de estoque, SKU, pagamento simulado, leitor XLSX/CSV (inclusive o limite do conteúdo descompactado) |
-| `test/clientes.test.js` | rascunho, ViaCEP, CEP geral, CEP único, endereço principal, CPF, autorização (inclusive `Permissoes`), exclusão, foto |
-| `test/estoque.test.js` | SKU, disponibilidade e status, concorrência com edição, inativação, exclusão e `Permissoes` |
+| `test/clientes.test.js` | rascunho, ViaCEP, CEP geral, CEP único, endereço principal, CPF, autorização (inclusive `Permissoes`), exclusão, foto (formato e gravação depois do Save) |
+| `test/estoque.test.js` | SKU, disponibilidade e status, concorrência com edição, inativação, exclusão, `Permissoes` e foto gravada depois do Save |
 | `test/pedidos.test.js` | registro com reserva, edição pela diferença, pagamento, aprovação, cancelamento (inclusive ações recusadas no rascunho e ações com o pedido alterado por outra operação), reembolso, campos somente leitura |
 | `test/reembolsos.test.js` | aprovar, rejeitar (motivo obrigatório), decisão única |
 | `test/importacao.test.js` | importação de clientes, estoque e pedidos (tudo ou nada), nomes e pedidos já importados recusados e dos modelos em `docs/` |
@@ -102,6 +106,7 @@ nodejs-padrao/
 │   ├── validacoes.cds           @mandatory / @assert
 │   └── lib/                     regras de domínio reutilizáveis
 ├── scripts/gerar-dados-demo.js  gerador dos CSVs de demonstração
+├── scripts/preparar-sqlite.js   cria o db.sqlite antes do primeiro watch
 └── test/                        testes automatizados
 ```
 
@@ -138,16 +143,17 @@ nodejs-padrao/
   Pedido) não é reimportada para o mesmo cliente; modelos
   em [`../docs/modelos-importacao`](../docs/modelos-importacao).
 
-## SAP HANA Cloud (pendente)
+## SAP HANA Cloud (implantação pendente)
 
-A conexão com o SAP HANA Cloud será configurada na implantação. Passos previstos:
+O `@cap-js/hana` está nas dependências e o perfil `[production]` aponta o banco para o SAP HANA
+Cloud (gerado com `cds add hana --for production`); o `@cap-js/sqlite` fica em `devDependencies`, fora
+do pacote de produção. Para implantar falta:
 
 ```sh
-cds add hana          # adiciona @cap-js/hana e o perfil [production]
 cds add xsuaa,mta     # autenticação e descritor MTA para Cloud Foundry
-cds build --production
+cds build --production  # gera gen/srv e gen/db (artefatos HDI para o HANA)
 ```
 
 O modelo foi escrito com funções portáveis do CAP (`substring`, `length`, `year`, `month`,
-`case`) e colunas geradas, que o SAP HANA também suporta. A execução sobre o SAP HANA Cloud ainda
-não foi testada.
+`case`) e colunas geradas, que o SAP HANA também suporta. A aplicação ainda não foi implantada nem
+executada sobre o SAP HANA Cloud.
