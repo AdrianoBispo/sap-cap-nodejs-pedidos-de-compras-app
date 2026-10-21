@@ -1,6 +1,10 @@
 <h1 align="center">Pedidos de Compras – SAP CAP / Node.js</h1>
 
 <p align="center">
+  <img src="assets/launchpad/launchpad.png" alt="Launchpad local com os oito tiles: quatro apps de gestão e quatro de análise" width="900">
+</p>
+
+<p align="center">
   Sistema de pedidos de compras com backend em <b>SAP Cloud Application Programming Model (CAP)</b>
   e oito aplicações <b>SAPUI5</b>, implementado em duas versões equivalentes: <b>JavaScript</b> e
   <b>TypeScript</b>.
@@ -16,10 +20,6 @@
   <img src="https://img.shields.io/badge/SAP%20Fiori-Elements-354A5F?style=for-the-badge&logo=sap&logoColor=white" alt="SAP Fiori Elements">
   <img src="https://img.shields.io/badge/SAPUI5-1.148%20LTS-1873B4?style=for-the-badge&logo=sap&logoColor=white" alt="SAPUI5 1.148 LTS">
   <img src="https://img.shields.io/badge/testes-74%20JS%20%7C%2076%20TS-9C3493?style=for-the-badge" alt="74 testes em JavaScript e 76 em TypeScript">
-</p>
-
-<p align="center">
-  <img src="assets/launchpad/launchpad.png" alt="Launchpad local com os oito tiles" width="900">
 </p>
 
 ---
@@ -78,7 +78,8 @@ Quatro apps de **gestão** (Fiori Elements: List Report + Object Page) e quatro 
 | <img src="assets/pedidos/pedidos.png" alt="Lista de pedidos" width="440"> | <img src="assets/pedidos/pedido-object-page.png" alt="Object Page de um pedido finalizado" width="440"> |
 
 <details>
-<summary>Mais capturas de tela</summary>
+<summary><b>Apps de gestão</b>: Clientes, Estoque, Reembolsos e Efetuar Pagamento</summary>
+<br>
 
 | Gestão de Clientes | Gestão de Estoque |
 | :----------------: | :---------------: |
@@ -87,6 +88,12 @@ Quatro apps de **gestão** (Fiori Elements: List Report + Object Page) e quatro 
 | Gestão de Reembolsos | Efetuar Pagamento |
 | :------------------: | :---------------: |
 | <img src="assets/reembolsos/reembolsos.png" alt="Lista de reembolsos" width="440"> | <img src="assets/pedidos/pagamento-mascara.png" alt="Diálogo Efetuar Pagamento com máscara no cartão, validade e CVV" width="440"> |
+
+</details>
+
+<details>
+<summary><b>Apps de análise</b>: Pedidos de Compras, Clientes, Itens do Estoque e Reembolsos</summary>
+<br>
 
 | Análise de Pedidos de Compras | Análise de Clientes |
 | :---------------------------: | :-----------------: |
@@ -253,6 +260,7 @@ arquitetura alvo está no [diagrama da BTP](assets/diagramas/diagrama-arquitetur
 
 | Versão | Mudanças |
 | --- | --- |
+| v1.12 | Launchpad no início do README; capturas das apps de gestão e de análise recolhidas em seções expansíveis |
 | v1.11 | README principal simplificado, com foco na visão geral; detalhes remetidos à especificação técnica |
 | v1.10 | Especificação técnica 2.6 simplificada e ilustrada com diagramas e capturas de tela |
 | v1.9 | Correção da gravação de fotos; SQLite em arquivo em desenvolvimento e SAP HANA Cloud em produção |
