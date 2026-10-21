@@ -98,28 +98,28 @@ regras de domínio, dos testes e dos scripts.
 ## Demonstração
 
 <p align="center">
-  <img src="docs/assets/launchpad.png" alt="Launchpad local com os oito tiles" width="900">
+  <img src="assets/launchpad.png" alt="Launchpad local com os oito tiles" width="900">
 </p>
 
 | Pedidos de Compras | Object Page do pedido |
 | :----------------: | :-------------------: |
-| <img src="docs/assets/pedidos.png" alt="Lista de pedidos" width="440"> | <img src="docs/assets/pedido-object-page.png" alt="Object Page de um pedido finalizado" width="440"> |
+| <img src="assets/pedidos.png" alt="Lista de pedidos" width="440"> | <img src="assets/pedido-object-page.png" alt="Object Page de um pedido finalizado" width="440"> |
 
 | Gestão de Clientes | Gestão de Estoque |
 | :----------------: | :---------------: |
-| <img src="docs/assets/clientes.png" alt="Lista de clientes" width="440"> | <img src="docs/assets/estoque.png" alt="Lista de itens de estoque" width="440"> |
+| <img src="assets/clientes.png" alt="Lista de clientes" width="440"> | <img src="assets/estoque.png" alt="Lista de itens de estoque" width="440"> |
 
 | Gestão de Reembolsos | Efetuar Pagamento (campos com máscara) |
 | :------------------: | :------------------------------------: |
-| <img src="docs/assets/reembolsos.png" alt="Lista de reembolsos" width="440"> | <img src="docs/assets/pagamento-mascara.png" alt="Diálogo Efetuar Pagamento com máscara no cartão, validade e CVV" width="440"> |
+| <img src="assets/reembolsos.png" alt="Lista de reembolsos" width="440"> | <img src="assets/pagamento-mascara.png" alt="Diálogo Efetuar Pagamento com máscara no cartão, validade e CVV" width="440"> |
 
 | Análise de Pedidos de Compras | Análise de Clientes |
 | :---------------------------: | :-----------------: |
-| <img src="docs/assets/analise-pedidos.png" alt="Painel da Análise de Pedidos de Compras" width="440"> | <img src="docs/assets/analise-clientes.png" alt="Painel da Análise de Clientes" width="440"> |
+| <img src="assets/analise-pedidos.png" alt="Painel da Análise de Pedidos de Compras" width="440"> | <img src="assets/analise-clientes.png" alt="Painel da Análise de Clientes" width="440"> |
 
 | Análise de Itens do Estoque | Análise de Pedidos de Reembolsos |
 | :-------------------------: | :------------------------------: |
-| <img src="docs/assets/analise-estoque.png" alt="Painel da Análise de Itens do Estoque" width="440"> | <img src="docs/assets/analise-reembolsos.png" alt="Painel da Análise de Pedidos de Reembolsos" width="440"> |
+| <img src="assets/analise-estoque.png" alt="Painel da Análise de Itens do Estoque" width="440"> | <img src="assets/analise-reembolsos.png" alt="Painel da Análise de Pedidos de Reembolsos" width="440"> |
 
 ---
 
@@ -186,7 +186,7 @@ regras de domínio, dos testes e dos scripts.
 ## Arquitetura
 
 <p align="center">
-  <a href="docs/assets/diagrama-arquitetura.png"><img src="docs/assets/diagrama-arquitetura.png" alt="Arquitetura da solução: launchpad, apps Fiori Elements e freestyle, serviços OData do SAP CAP, srv/lib, modelo CDS, SQLite, SAP HANA Cloud, XSUAA e API ViaCEP" width="900"></a>
+  <a href="assets/diagrama-arquitetura.png"><img src="assets/diagrama-arquitetura.png" alt="Arquitetura da solução: launchpad, apps Fiori Elements e freestyle, serviços OData do SAP CAP, srv/lib, modelo CDS, SQLite, SAP HANA Cloud, XSUAA e API ViaCEP" width="900"></a>
 </p>
 
 Diagrama feito no draw.io com as formas oficiais da SAP; o arquivo editável, com esta e as páginas da
@@ -246,7 +246,7 @@ sempre na transação da requisição: qualquer erro desfaz tudo.
 ### Arquitetura na SAP BTP (implantação)
 
 <p align="center">
-  <a href="docs/assets/diagrama-arquitetura-btp.png"><img src="docs/assets/diagrama-arquitetura-btp.png" alt="Arquitetura alvo na SAP BTP: SAP Build Work Zone, HTML5 Application Repository, Destination service, serviço CAP e db-deployer no Cloud Foundry, HDI container no SAP HANA Cloud, XSUAA, provedor de identidade e API ViaCEP" width="900"></a>
+  <a href="assets/diagrama-arquitetura-btp.png"><img src="assets/diagrama-arquitetura-btp.png" alt="Arquitetura alvo na SAP BTP: SAP Build Work Zone, HTML5 Application Repository, Destination service, serviço CAP e db-deployer no Cloud Foundry, HDI container no SAP HANA Cloud, XSUAA, provedor de identidade e API ViaCEP" width="900"></a>
 </p>
 
 Arquitetura alvo da implantação, ainda pendente (veja
@@ -277,7 +277,7 @@ Cinco status: `ABERTO`, `AGUARDANDO_APROVACAO`, `PROCESSANDO_REEMBOLSO`, `CANCEL
 Status do pagamento: `PENDENTE`, `APROVADO`, `RECUSADO` e `DEVOLVIDO` (quando o reembolso é aprovado).
 
 <p align="center">
-  <a href="docs/assets/diagrama-ciclo-pedido.png"><img src="docs/assets/diagrama-ciclo-pedido.png" alt="Ciclo de vida do pedido: status, transições e ações por status" width="900"></a>
+  <a href="assets/diagrama-ciclo-pedido.png"><img src="assets/diagrama-ciclo-pedido.png" alt="Ciclo de vida do pedido: status, transições e ações por status" width="900"></a>
 </p>
 
 <details>
@@ -313,7 +313,7 @@ serviço externo). Verde indica sucesso, vermelho erro e laranja aviso. Todos es
 Do rascunho ao pedido `ABERTO`: validações, número, preços fixados e reserva do estoque.
 
 <p align="center">
-  <a href="docs/assets/diagrama-registro-pedido.png"><img src="docs/assets/diagrama-registro-pedido.png" alt="Fluxograma do registro do pedido" width="900"></a>
+  <a href="assets/diagrama-registro-pedido.png"><img src="assets/diagrama-registro-pedido.png" alt="Fluxograma do registro do pedido" width="900"></a>
 </p>
 
 ### Efetuar Pagamento
@@ -322,7 +322,7 @@ Diálogo com máscara, validação dos dados do cartão, transição atômica de
 resultado seguro.
 
 <p align="center">
-  <a href="docs/assets/diagrama-efetuar-pagamento.png"><img src="docs/assets/diagrama-efetuar-pagamento.png" alt="Fluxograma do Efetuar Pagamento" width="900"></a>
+  <a href="assets/diagrama-efetuar-pagamento.png"><img src="assets/diagrama-efetuar-pagamento.png" alt="Fluxograma do Efetuar Pagamento" width="900"></a>
 </p>
 
 ### Aprovação do pedido
@@ -330,7 +330,7 @@ resultado seguro.
 Transição atômica para `FINALIZADO`, baixa do estoque e snapshots.
 
 <p align="center">
-  <a href="docs/assets/diagrama-aprovacao-pedido.png"><img src="docs/assets/diagrama-aprovacao-pedido.png" alt="Fluxograma da aprovação do pedido" width="900"></a>
+  <a href="assets/diagrama-aprovacao-pedido.png"><img src="assets/diagrama-aprovacao-pedido.png" alt="Fluxograma da aprovação do pedido" width="900"></a>
 </p>
 
 ### Cancelamento e reembolso
@@ -339,7 +339,7 @@ Cancelamento direto (sem pagamento aprovado) ou solicitação de reembolso decid
 Reembolsos.
 
 <p align="center">
-  <a href="docs/assets/diagrama-cancelamento-reembolso.png"><img src="docs/assets/diagrama-cancelamento-reembolso.png" alt="Fluxograma do cancelamento do pedido e do reembolso" width="900"></a>
+  <a href="assets/diagrama-cancelamento-reembolso.png"><img src="assets/diagrama-cancelamento-reembolso.png" alt="Fluxograma do cancelamento do pedido e do reembolso" width="900"></a>
 </p>
 
 ### Endereço do cliente: consulta de CEP
@@ -347,7 +347,7 @@ Reembolsos.
 Reaproveitamento de CEP já validado, consulta ao ViaCEP, CEP geral e validações do Save.
 
 <p align="center">
-  <a href="docs/assets/diagrama-endereco-cep.png"><img src="docs/assets/diagrama-endereco-cep.png" alt="Fluxograma da consulta de CEP do endereço do cliente" width="900"></a>
+  <a href="assets/diagrama-endereco-cep.png"><img src="assets/diagrama-endereco-cep.png" alt="Fluxograma da consulta de CEP do endereço do cliente" width="900"></a>
 </p>
 
 ### Importação por planilha
@@ -355,7 +355,7 @@ Reaproveitamento de CEP já validado, consulta ao ViaCEP, CEP geral e validaçõ
 Validação de todas as linhas antes de gravar (tudo ou nada).
 
 <p align="center">
-  <a href="docs/assets/diagrama-importacao-planilha.png"><img src="docs/assets/diagrama-importacao-planilha.png" alt="Fluxograma da importação em massa por planilha" width="900"></a>
+  <a href="assets/diagrama-importacao-planilha.png"><img src="assets/diagrama-importacao-planilha.png" alt="Fluxograma da importação em massa por planilha" width="900"></a>
 </p>
 
 ---
@@ -399,8 +399,10 @@ Validação de todas as linhas antes de gravar (tudo ou nada).
 │   ├── scripts/preparar-sqlite.ts
 │   └── tsconfig.json, tsconfig.cdsbuild.json
 │
+├── assets/                            imagens usadas neste README (capturas e diagramas)
+│
 ├── docs/
-│   ├── assets/                        imagens usadas neste README (capturas e diagramas)
+│   ├── apresentacoes/                 seis decks .pptx, um por etapa, com uma seção por BO
 │   ├── arquitetura-e-processos.drawio arquitetura e fluxogramas (draw.io)
 │   ├── modelos-importacao/            modelos de planilha (.xlsx e .csv)
 │   ├── especificacao-tecnica.md       especificação técnica (Markdown)
