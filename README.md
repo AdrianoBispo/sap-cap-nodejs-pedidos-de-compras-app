@@ -304,8 +304,11 @@ stateDiagram-v2
 
 ## Diagramas dos processos
 
-Fluxogramas dos principais processos, em raias por ator (usuário, serviço SAP CAP, banco de dados e
-serviço externo). Verde indica sucesso, vermelho erro e laranja aviso. Todos estão em
+Fluxogramas dos principais processos, em raias por responsável (usuário, serviço SAP CAP, banco de dados
+e serviço externo), cada uma com sua faixa de cor e ícone SAP. Seguem a mesma legenda do projeto RAP:
+início em pílula azul, etapas com borda azul, decisões em laranja, status do pedido em azul claro, fim
+em pílula verde e erros (nada é gravado) em pílula vermelha; avisos que não bloqueiam ficam em laranja
+tracejado e as tabelas gravadas, em cilindro. Todos estão em
 [`docs/arquitetura-e-processos.drawio`](docs/arquitetura-e-processos.drawio) (uma página por processo).
 
 ### Registro do pedido
