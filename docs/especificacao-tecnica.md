@@ -1,1193 +1,483 @@
 # Especificação Técnica — Sistema de Pedidos de Compras (SAP CAP + SAP Fiori)
 
-> **Versão 2.5 — outubro de 2026.** Esta revisão descreve o sistema **como implementado** nas duas
-> versões do repositório: [`nodejs-padrao`](../nodejs-padrao) (JavaScript) e
-> [`nodejs-typescript`](../nodejs-typescript) (TypeScript). As duas compartilham o mesmo modelo CDS,
-> os mesmos serviços, as mesmas aplicações SAPUI5 e a mesma suíte de testes; diferem apenas na
-> linguagem dos handlers (seção 19). A seção 22 resume o que mudou em relação à versão 1 e nas
-> revisões 2.1 (campos somente leitura no pedido, navegação entre apps e importação de pedidos sem
-> duplicidade), 2.2 (análises em quatro apps, máscara no pagamento e navegações das Object Pages),
-> 2.3 (permissões na UI, ações recusadas no rascunho e proteções na importação), 2.4 (transições de
-> status atômicas nas ações do pedido) e 2.5 (fotos gravadas corretamente, SQLite em arquivo no
-> desenvolvimento e SAP HANA Cloud configurado para produção).
+> **Versão 2.6 — outubro de 2026.** Descreve o sistema **como implementado** nas duas versões do
+> repositório, [`nodejs-padrao`](../nodejs-padrao) (JavaScript) e
+> [`nodejs-typescript`](../nodejs-typescript) (TypeScript), que compartilham modelo CDS, serviços,
+> apps SAPUI5 e testes. Os diagramas editáveis estão em
+> [`arquitetura-e-processos.drawio`](arquitetura-e-processos.drawio).
 
 ---
 
-## 1. Objetivo
+## 1. Visão Geral
 
 Aplicação full stack de pedidos de compras com foco educacional, construída no SAP Cloud Application
-Programming Model (CAP), contemplando:
-
-- gestão de clientes e de seus endereços (com validação de CEP no ViaCEP);
-- gestão de estoque (itens, SKU, reserva, baixa e liberação);
-- ciclo completo do pedido: rascunho, registro com reserva de estoque, pagamento simulado,
-  aprovação/finalização e cancelamento;
-- solicitação e decisão de reembolso para pedidos pagos que são cancelados;
-- preservação histórica por snapshots imutáveis;
-- importação em massa por planilha (`.xlsx`/`.csv`);
-- análises (indicadores e gráficos) sobre pedidos, clientes, estoque e reembolsos.
-
-**Fora do objetivo:** gestão de envio, logística, rastreamento de entrega e integração real com
-gateways de pagamento.
-
-A versão da aplicação em SAP RAP / ABAP Cloud está em
+Programming Model (CAP). A versão em SAP RAP / ABAP Cloud está em
 [sap-abap-rap-pedidos-de-compras-app](https://github.com/AdrianoBispo/sap-abap-rap-pedidos-de-compras-app).
 
-### 1.1 Stack tecnológica
+**Escopo**
 
-| Camada | Tecnologia | Situação |
-|---|---|---|
-| Backend | SAP CAP 10 (`@sap/cds` 10) em Node.js 22+, módulos ESM | Implementado |
-| Linguagem | JavaScript (`nodejs-padrao`) ou TypeScript 6.0 `strict` com cds-typer (`nodejs-typescript`) | Implementado |
-| Banco local | SQLite em arquivo (`@cap-js/sqlite`, `db.sqlite`) no perfil `[development]`, criado no primeiro `npm run watch` e mantido entre reinícios; testes em SQLite em memória | Implementado |
-| Banco produtivo | SAP HANA Cloud (`@cap-js/hana`, perfil `[production]`) | Configurado; implantação pendente (seção 23) |
-| Protocolo | OData V4 com rascunho (draft), `$apply` para análises | Implementado |
-| Frontend | SAPUI5 1.148 (LTS): 4 apps Fiori Elements V4 (List Report/Object Page) + 4 apps freestyle de análise | Implementado |
-| Servidor das apps | `cds-plugin-ui5` (apps servidas pelo próprio CAP) | Implementado |
-| Portal | Launchpad local (sandbox do SAP Fiori launchpad); SAP Build Work Zone na implantação | Local implementado; Work Zone pendente |
-| Integração | ViaCEP via `fetch` nativo (URL em `cds.requires.viacep`) | Implementado |
-| Segurança | Autenticação *mocked* com papéis `Admin`/`Comum`; XSUAA na implantação | Mocked implementado; XSUAA pendente |
-| Deploy | Cloud Foundry / MTA (`mta.yaml`) | Pendente |
-| Qualidade | `node:test` + `@cap-js/cds-test` (74 testes em JavaScript, 76 em TypeScript), ESLint 10 | Implementado |
+- Clientes e endereços, com preenchimento e validação do CEP no ViaCEP.
+- Estoque: itens com SKU automático, quantidade total, reservada e disponível.
+- Ciclo do pedido: rascunho, registro com reserva, pagamento simulado, aprovação e cancelamento.
+- Reembolso de pedidos pagos que são cancelados.
+- Snapshots imutáveis do cliente e dos itens no encerramento do pedido.
+- Importação por planilha (`.xlsx`/`.csv`) de clientes, itens e pedidos.
+- 20 análises em quatro apps (pedidos, clientes, estoque e reembolsos).
+- Papéis `Admin` e `Comum`, controle de concorrência no estoque e testes automatizados.
 
----
+**Fora do escopo:** frete, logística e rastreamento; gateway de pagamento real; histórico de
+tentativas de pagamento; auditoria e monitoramento produtivo.
 
-## 2. Escopo
+![Launchpad local com os oito tiles](../assets/launchpad/launchpad.png)
 
-### 2.1 Incluído
+*Launchpad local: quatro apps de gestão e quatro de análise.*
 
-- Cadastro, consulta, edição (com rascunho), ativação/inativação e exclusão controlada de clientes.
-- Múltiplos endereços por cliente, com exatamente um endereço principal.
-- Preenchimento e validação do endereço pelo CEP (ViaCEP), com reaproveitamento de CEPs já
-  cadastrados e tratamento de CEP geral de município.
-- Cadastro, consulta, edição (com rascunho), inativação e exclusão controladas de itens de estoque.
-- Estoque com quantidade total, reservada e disponível; status `SEM_ESTOQUE`/`ACABANDO`/`EM_ESTOQUE`.
-- SKU gerado automaticamente no formato `SKU-<3 letras da categoria>-<10 dígitos>`.
-- Pedido em rascunho; o **Salvar** registra o pedido (`ABERTO`), gera o número e reserva o estoque.
-- Edição dos itens do pedido `ABERTO`, com ajuste da reserva pela diferença.
-- Pagamento simulado com cartão de crédito ou débito, sem persistir dados sensíveis, com novas
-  tentativas e apenas a última tentativa mantida.
-- Aprovação/finalização com baixa do estoque e snapshots.
-- Cancelamento com motivo; pedido pago gera solicitação de reembolso em vez de cancelar direto.
-- Gestão de reembolsos: aprovar (cancela o pedido e devolve o pagamento) ou rejeitar (retoma o pedido).
-- Importação por planilha de clientes, itens e pedidos, no modo "tudo ou nada".
-- Camada analítica somente leitura com 20 análises em quatro apps freestyle (uma por domínio).
-- Controle de acesso por papel (`Admin` e `Comum`).
-- Controle de concorrência nas movimentações de estoque.
-- Testes automatizados permanentes (unidade e serviços).
-- Dados de demonstração: 100 clientes, 100 itens e 100 pedidos em todos os status.
+### 1.1 Stack
 
-### 2.2 Fora do escopo
+| Camada | Tecnologia |
+|---|---|
+| Backend | SAP CAP 10 (`@sap/cds` 10), Node.js 22+, ESM |
+| Linguagem | JavaScript ou TypeScript 6.0 `strict` com cds-typer |
+| Banco | SQLite em arquivo (`db.sqlite`) no desenvolvimento; SAP HANA Cloud (`@cap-js/hana`) configurado para produção |
+| Protocolo | OData V4 com rascunho (draft) e `$apply` |
+| Frontend | SAPUI5 1.148: 4 apps Fiori Elements V4 + 4 apps freestyle de análise, servidas pelo `cds-plugin-ui5` |
+| Integração | ViaCEP via `fetch` (URL em `cds.requires.viacep`) |
+| Segurança | Autenticação *mocked* (`admin`/`comum`); XSUAA na implantação |
+| Qualidade | `node:test` + `@cap-js/cds-test` (74 testes em JS, 76 em TS), ESLint 10, QUnit nas análises |
 
-- Entrega, frete, transportadoras e rastreamento.
-- Gateway de pagamento real e armazenamento de dados sensíveis de cartão.
-- Histórico de tentativas de pagamento (só a última é mantida).
-- Auditoria avançada, logs estruturados e monitoramento produtivo.
-- Uso por clientes reais.
+### 1.2 Arquitetura
+
+![Arquitetura da solução](../assets/diagramas/diagrama-arquitetura.png)
+
+*Launchpad e apps SAPUI5 consomem um serviço OData por aplicação; as regras de domínio ficam em
+`srv/lib` e rodam na transação da requisição.*
 
 ---
 
-## 3. Perfis de Usuário e Permissões
+## 2. Perfis e Segurança
 
 | Recurso | `Comum` | `Admin` |
 |---|---|---|
-| Clientes e endereços | Consultar | Consultar, criar, editar, inativar, excluir, importar planilha |
-| Itens de estoque | Consultar | Consultar, criar, editar, inativar, excluir, importar planilha |
-| Pedidos | Criar, editar (`ABERTO`), pagar, aprovar, cancelar, importar planilha | Idem |
+| Clientes, endereços e itens de estoque | Consultar | Consultar, criar, editar, inativar, excluir, importar |
+| Pedidos | Criar, editar, pagar, aprovar, cancelar, importar | Idem |
 | Reembolsos | Consultar, aprovar, rejeitar | Idem |
 | Análises | Consultar | Consultar |
-| Snapshots e pagamentos persistidos | Somente leitura | Somente leitura |
 
-Nenhum perfil pode editar pedidos finalizados ou cancelados, alterar snapshots ou consultar dados
-sensíveis de cartão (eles nunca são gravados). Usuário não autenticado não acessa nenhum serviço.
+- Autorização declarativa: `@requires: 'authenticated-user'` em todos os serviços; `@restrict` dá
+  `READ` ao `Comum` e `*` ao `Admin` em clientes e estoque; `importarPlanilha` de clientes e estoque
+  exige `Admin`.
+- Usuários de desenvolvimento (HTTP Basic, perfil `[development]` do `package.json`): `admin`/`admin`
+  e `comum`/`comum`.
+- Como os papéis não chegam às anotações de UI, `ClientesService` e `EstoqueService` expõem o
+  singleton `Permissoes` (`somenteLeitura`), usado por `UI.CreateHidden`, `UI.UpdateHidden` e
+  `UI.DeleteHidden`. O `Comum` só vê as opções de consulta; o backend continua barrando alterações.
+- Dados de cartão nunca são gravados, retornados ou registrados em log.
+- Campos controlados pelo backend (status, totais, número, reserva, score, endereço do pedido)
+  ignoram valores enviados pela UI.
+- Pedidos encerrados e snapshots são imutáveis; o pedido registrado é cancelado, nunca excluído.
+- Fotos validadas por MIME, extensão e assinatura binária (JPEG, PNG ou WEBP).
 
----
+![Gestão de Estoque vista pelo usuário Comum](../assets/estoque/fluxo-permissoes-estoque-usuario-comum.png)
 
-## 4. Autenticação e Autorização
-
-Em desenvolvimento a autenticação é *mocked* (HTTP Basic), configurada no `package.json`:
-
-```json
-{
-  "cds": {
-    "requires": {
-      "auth": {
-        "[development]": {
-          "kind": "mocked",
-          "users": {
-            "admin": { "password": "admin", "roles": ["Admin"] },
-            "comum": { "password": "comum", "roles": ["Comum"] },
-            "*": false
-          }
-        }
-      }
-    }
-  }
-}
-```
-
-A autorização é declarativa nos serviços CDS:
-
-| Serviço | Regra |
-|---|---|
-| Todos os serviços transacionais | `@requires: 'authenticated-user'` |
-| `ClientesService.Clientes`, `Enderecos`; `EstoqueService.Itens` | `@restrict`: `READ` para `Comum`, `*` para `Admin` |
-| `importarPlanilha` de clientes e de estoque | `@requires: 'Admin'` |
-| `PedidosService.Pedidos`, `ReembolsosService.Reembolsos` | `@restrict`: `*` para `Comum` e `Admin` |
-| `AnaliticoService` | `@requires: ['Comum', 'Admin']` |
-
-Os papéis do `@restrict` não chegam às anotações de UI, que são as mesmas para todos os usuários.
-Por isso `ClientesService` e `EstoqueService` expõem o singleton somente leitura `Permissoes`, com
-`somenteLeitura` = usuário sem o papel `Admin` (`srv/lib/permissoes`). As anotações
-`UI.CreateHidden`, `UI.UpdateHidden` e `UI.DeleteHidden` de `Clientes`, `Enderecos` e `Itens`, a
-ação *Definir como principal* e o botão *Importar planilha* usam esse valor, e o usuário `Comum` só
-vê as opções de consulta. O `@restrict` continua barrando a alteração no backend.
-
-Na implantação (pendente), os papéis `Admin` e `Comum` viram *role templates* do XSUAA
-(`xs-security.json`) associados a *role collections* na subconta da SAP BTP.
+*Usuário `Comum` na Gestão de Estoque: sem Criar, Excluir ou Importar planilha.*
 
 ---
 
-## 5. Padrão de Nomenclatura
+## 3. Modelo de Dados
 
-- Entidades no plural (`Clientes`, `Itens`, `Pedidos`), em português.
-- CodeLists no plural ou com o nome do conceito (`Generos`, `StatusPedido`).
-- Campos em `camelCase`; códigos de status em `UPPER_SNAKE_CASE`.
-- Associações geram a chave estrangeira `<associação>_<chave>` (ex.: `cliente_ID`, `statusPedido_code`).
-- Na versão TypeScript, os tipos gerados usam o singular (`Cliente`, `Item`, `ItemPedido`),
-  definido em `srv/typer.cds` quando o singular não é o plural sem o `s` final.
+Arquivos `db/common.cds` (tipos e CodeLists) e `db/schema.cds` (entidades), namespace
+`pedidoscompras`. Todas as entidades usam `cuid` e `managed`. Convenções: entidades no plural e em
+português, campos em `camelCase`, códigos de status em `UPPER_SNAKE_CASE`.
 
-### 5.1 Entidades persistentes (namespace `pedidoscompras`)
+| Entidade | Finalidade | Campos e regras principais |
+|---|---|---|
+| `Clientes` | Cadastro | `cpf` (único, dígitos verificadores), `nome`, `email` (minúsculas), `telefone` (10–11 dígitos), `dataNascimento` (não futura), `genero`, `clienteAtivo`, `scoreCliente` (0–100, sorteado), `fotoCliente`; composição `enderecos` |
+| `Enderecos` | Endereços do cliente | `cep` (único por cliente), `numero`, `complemento`, `logradouro`, `bairro`, `cidade`, `uf`, `estado`, `cepGeral`, `cepStatus` (`V`/`I`/`X`), `principal` (um por cliente) |
+| `Itens` | Estoque | `sku` (gerado, único), `nome`, `descricao`, `categoria`, `qtdeEstoque`, `qtdeReservada`, `qtdeDisponivel` e `statusEstoque` (colunas geradas), `precoUnitario`, `currency` (BRL), `itemAtivo`, `fotoItem` |
+| `Pedidos` | Cabeçalho do pedido | `numeroPedido` (10 dígitos), `cliente` (imutável após o registro), `endereco`, `statusPedido`, `statusPagamento`, `valorTotal`, `observacao`, `referenciaImportacao`, dados de finalização e de cancelamento |
+| `ItensPedido` | Linhas do pedido | `item` (ativo), `qtdeItemPedido` (> 0), `precoUnitarioSnapshot` (fixado no registro), `valorTotal` |
+| `Pagamentos` | Última tentativa | `metodoPagamento`, `statusPagamento`, `bandeiraCartao`, `ultimos4DigitosCartao`, `cartaoMascarado`, `codigoAutorizacao`, `mensagemPagamento`, `dataPagamento` |
+| `PedidosClienteSnapshots` | Cliente e endereço congelados | Cópia dos dados do cliente e do endereço, com `motivoSnapshot` (`FINALIZACAO`/`CANCELAMENTO`) |
+| `PedidosItensSnapshots` | Itens congelados | SKU, nome, descrição, categoria, quantidade, preço e total de cada linha |
+| `Reembolsos` | Solicitações de reembolso | `pedido`, `statusReembolso`, `statusPedidoAnterior`, `valorReembolso`, motivo/data/usuário da solicitação e da decisão |
+| `Numeracoes` | Sequenciais | `objeto` (`PEDIDO`, `SKU`) e `ultimoNumero`, incrementado por `UPDATE` atômico |
 
-| Entidade | Finalidade |
-|---|--- |
-| `Clientes` | Cadastro de clientes |
-| `Enderecos` | Endereços dos clientes |
-| `Itens` | Itens do estoque |
-| `Pedidos` | Cabeçalho e ciclo de vida do pedido |
-| `ItensPedido` | Linhas do pedido |
-| `Pagamentos` | Resultado seguro da última tentativa de pagamento |
-| `PedidosClienteSnapshots` | Cliente e endereço congelados no encerramento |
-| `PedidosItensSnapshots` | Itens congelados no encerramento |
-| `Reembolsos` | Solicitações de reembolso |
-| `Numeracoes` | Último número de cada sequencial (`PEDIDO`, `SKU`) |
+**CodeLists** (aspect `CodeListOrdenada`, com `ordem` e `criticality` para colorir os status):
 
-### 5.2 CodeLists
-
-Todas estendem o aspect `CodeListOrdenada` (`sap.common.CodeList` + `ordem` + `criticality`), com
-textos traduzíveis (`name`, `descr`).
-
-| Entidade | Códigos |
+| CodeList | Códigos |
 |---|---|
 | `Generos` | `MASCULINO`, `FEMININO`, `NAO_BINARIO`, `OUTRO`, `NAO_INFORMADO` |
 | `Categorias` | `ELETRONICOS`, `INFORMATICA`, `ESCRITORIO`, `CASA`, `VESTUARIO`, `ALIMENTOS`, `OUTROS` |
-| `StatusEstoque` | `SEM_ESTOQUE`, `ACABANDO`, `EM_ESTOQUE` |
+| `StatusEstoque` | `SEM_ESTOQUE` (≤ 0), `ACABANDO` (1–10), `EM_ESTOQUE` (≥ 11) |
 | `StatusPedido` | `ABERTO`, `AGUARDANDO_APROVACAO`, `PROCESSANDO_REEMBOLSO`, `CANCELADO`, `FINALIZADO` |
 | `StatusPagamento` | `PENDENTE`, `APROVADO`, `RECUSADO`, `DEVOLVIDO` |
 | `StatusReembolso` | `PENDENTE`, `APROVADO`, `REJEITADO` |
 | `MetodosPagamento` | `CARTAO_CREDITO`, `CARTAO_DEBITO` |
 
-A criticidade (`criticality`: 0 neutra, 1 negativa, 2 crítica, 3 positiva) colore os status na UI.
-
----
-
-## 6. Modelagem de Dados
-
-Arquivos: `db/common.cds` (tipos e CodeLists) e `db/schema.cds` (entidades). Todas as entidades
-usam `cuid` (chave `ID` UUID) e `managed` (`createdAt`, `createdBy`, `modifiedAt`, `modifiedBy`).
-
-### 6.1 Tipos reutilizáveis
-
-| Tipo | Definição | Uso |
-|---|---|---|
-| `Cpf` | `String(11)` | CPF somente com dígitos |
-| `Cep` | `String(8)` | CEP somente com dígitos |
-| `Telefone` | `String(11)` | DDD + número, somente dígitos (10 ou 11) |
-| `Valor` | `Decimal(15,2)` | Valores monetários (sempre com um `Currency`) |
-| `StatusCep` | `String(1)` enum `V`/`I`/`X` | Validado, inválido, ViaCEP indisponível |
-| `Criticidade` | `Integer` enum 0–3 | Criticidade Fiori |
-
-### 6.2 `Clientes`
-
-| Campo | Tipo | Regras |
-|---|---|---|
-| `fotoCliente` | `LargeBinary` (`@Core.MediaType`) | JPEG, PNG ou WEBP (MIME, extensão e assinatura binária) |
-| `fotoClienteMimeType` | `String(50)` | MIME da foto |
-| `fotoClienteNome` | `String(255)` | Nome do arquivo |
-| `cpf` | `Cpf` | Obrigatório, dígitos verificadores válidos, único (`@assert.unique`) |
-| `nome` | `String(255)` | Obrigatório |
-| `email` | `String(100)` | Obrigatório, formato validado, gravado em minúsculas |
-| `telefone` | `Telefone` | Obrigatório, 10 ou 11 dígitos |
-| `genero` | `Association to Generos` | Opcional, deve existir (`@assert.target`) |
-| `dataNascimento` | `Date` | Obrigatória, não pode ser futura |
-| `clienteAtivo` | `Boolean default true` | Só cliente ativo faz pedidos |
-| `scoreCliente` | `Decimal(5,2)` | Sorteado (0–100) na criação; somente leitura |
-| `enderecos` | `Composition of many Enderecos` | Editados no rascunho do cliente |
-| `enderecoPrincipal` | `Association to one Enderecos` (`principal = true`) | Usado em listas, pedidos e análises |
-| `pedidos` | `Association to many Pedidos` | Bloqueia exclusão |
-| `cpfFormatado` | calculado `String(14)` | `000.000.000-00` |
-| `telefoneFormatado` | calculado `String(15)` | `(00) 00000-0000` ou `(00) 0000-0000` |
-| `scoreCriticality` | calculado `Integer` | Cor do score: 1 (≤ 40), 2 (41–69), 3 (≥ 70) |
-
-### 6.3 `Enderecos`
-
-| Campo | Tipo | Regras |
-|---|---|---|
-| `cliente` | `Association to Clientes` | Dono do endereço |
-| `cep` | `Cep` | Obrigatório; único por cliente (`@assert.unique.cepPorCliente`) |
-| `logradouro`, `bairro` | `String(150)`, `String(100)` | Preenchidos pelo ViaCEP; editáveis e obrigatórios só para CEP geral |
-| `numero` | `String(20)` | Obrigatório |
-| `complemento` | `String(100)` | Opcional |
-| `cidade`, `uf`, `estado` | `String(100)`, `String(2)`, `String(100)` | Sempre do ViaCEP (somente leitura) |
-| `cepGeral` | `Boolean default false` | CEP de município sem logradouro/bairro |
-| `cepStatus` | `StatusCep` | Resultado da validação (`V`, `I`, `X`) |
-| `principal` | `Boolean default false` | Exatamente um por cliente |
-| `cepFormatado` | calculado `String(9)` | `00000-000` |
-| `enderecoCompleto` | calculado `String(500)` | `Logradouro, Nº - Compl. - Bairro - Cidade/UF - CEP 00000-000` |
-| `controleCampoCep` | calculado `Integer` | Field control: 7 (obrigatório) para CEP geral, senão 1 (somente leitura) |
-
-### 6.4 `Itens`
-
-| Campo | Tipo | Regras |
-|---|---|---|
-| `fotoItem`, `fotoItemMimeType`, `fotoItemNome` | como em `Clientes` | JPEG, PNG ou WEBP |
-| `sku` | `String(21)` | Gerado no Save; único (`@assert.unique.sku`) |
-| `nome` | `String(120)` | Obrigatório |
-| `descricao` | `String(500)` | Opcional |
-| `categoria` | `Association to Categorias` | Obrigatória; define o prefixo do SKU |
-| `qtdeEstoque` | `Integer default 0` | Obrigatória, `>= 0` e `>= qtdeReservada` |
-| `qtdeReservada` | `Integer default 0` | Alterada somente pelos pedidos (nunca pela UI) |
-| `qtdeDisponivel` | calculado **stored** | `qtdeEstoque - qtdeReservada` (coluna gerada, filtrável) |
-| `statusEstoque_code` | calculado **stored** | `SEM_ESTOQUE` (≤ 0), `ACABANDO` (1–10), `EM_ESTOQUE` (≥ 11) |
-| `statusEstoque` | `Association to StatusEstoque` | Texto e criticidade do status |
-| `currency` | `Currency default 'BRL'` | Obrigatória |
-| `precoUnitario` | `Valor` | Obrigatório, `>= 0` |
-| `itemAtivo` | `Boolean default true` | Só item ativo entra em pedidos novos |
-
-### 6.5 `Pedidos`
-
-| Campo | Tipo | Regras |
-|---|---|---|
-| `numeroPedido` | `String(10)` | Sequencial com 10 dígitos, gerado no registro; único |
-| `cliente` | `Association to Clientes` | Obrigatório; imutável após o registro |
-| `endereco` | `Association to Enderecos` | Endereço principal do cliente (derivado) |
-| `enderecoPrincipalCompleto` | `String(500)` | Texto do endereço usado no pedido |
-| `itens` | `Composition of many ItensPedido` | Ao menos uma linha |
-| `pagamento` | `Composition of one Pagamentos` | Última tentativa |
-| `clienteSnapshot` | `Composition of one PedidosClienteSnapshots` | Criado no encerramento |
-| `itensSnapshot` | `Composition of many PedidosItensSnapshots` | Criado no encerramento |
-| `reembolsos` | `Association to many Reembolsos` | Solicitações do pedido |
-| `statusPedido` | `Association to StatusPedido` | Ciclo de vida (seção 8) |
-| `statusPagamento` | `Association to StatusPagamento` | Réplica do status do pagamento para lista e filtros |
-| `observacao` | `String(500)` | Somente leitura na tela; preenchida na importação por planilha |
-| `referenciaImportacao` | `String(40)` | Referência da planilha (coluna Pedido), gravada só pela importação; somente leitura |
-| `currency`, `valorTotal` | `Currency default 'BRL'`, `Valor default 0` | Total calculado pelo backend |
-| `dataFinalizacao` | `Timestamp` | Preenchida na aprovação |
-| `motivoCancelamento`, `dataCancelamento`, `canceladoPor` | `String(500)`, `Timestamp`, `User` | Preenchidos no cancelamento |
-| `encerrado`, `naoEncerrado`, `naoFinalizado`, `naoCancelado` | calculados `Boolean` | Dirigem as seções da Object Page |
-
-Os campos `numeroPedido`, `statusPedido_code`, `statusPagamento_code`, `endereco_ID`,
-`enderecoPrincipalCompleto`, `valorTotal`, `currency_code`, `dataFinalizacao`, `motivoCancelamento`,
-`dataCancelamento` e `canceladoPor` são **controlados pelo backend**: qualquer valor enviado pela UI
-é descartado.
-
-### 6.6 `ItensPedido`
-
-| Campo | Tipo | Regras |
-|---|---|---|
-| `pedido` | `Association to Pedidos` | Pedido dono da linha |
-| `item` | `Association to Itens` | Obrigatório; item ativo (valor ajuda `ItensAtivos`) |
-| `qtdeItemPedido` | `Integer` | Obrigatória, `> 0` (padrão 1 na nova linha) |
-| `precoUnitarioSnapshot` | `Valor` | Provisório no rascunho; fixado no registro |
-| `currency` | `Currency default 'BRL'` | Itens precisam estar em BRL |
-| `valorTotal` | `Valor default 0` | `qtdeItemPedido × precoUnitarioSnapshot` (persistido) |
-| `observacao` | `String(500)` | Livre |
-
-### 6.7 `Pagamentos`
-
-Somente a **última tentativa segura**. Número completo do cartão, validade e CVV **nunca** são
-persistidos nem registrados em log.
-
-| Campo | Tipo |
-|---|---|
-| `pedido` | `Association to Pedidos` |
-| `metodoPagamento` | `Association to MetodosPagamento` |
-| `statusPagamento` | `Association to StatusPagamento` |
-| `bandeiraCartao` | `String(30)` (`VISA`, `MASTERCARD` ou `OUTRA`) |
-| `ultimos4DigitosCartao` | `String(4)` |
-| `cartaoMascarado` | `String(30)` (`**** **** **** 1234`) |
-| `codigoAutorizacao` | `String(50)` (`SIM` + 6 dígitos; vazio na recusa) |
-| `mensagemPagamento` | `String(255)` |
-| `dataPagamento` | `Timestamp` |
-
-### 6.8 `PedidosClienteSnapshots`
-
-Cópia dos dados do cliente (`cpf`, `nome`, `email`, `telefone`, `genero`, `dataNascimento`,
-`clienteAtivo`, `scoreCliente`) e do endereço do pedido (`endereco`, `cep`, `logradouro`, `numero`,
-`complemento`, `bairro`, `cidade`, `uf`, `estado`, `enderecoCompleto`) no encerramento, com
-`motivoSnapshot` (`FINALIZACAO` ou `CANCELAMENTO`) e os calculados `cpfFormatado` e
-`telefoneFormatado`. Um por pedido.
-
-### 6.9 `PedidosItensSnapshots`
-
-Uma linha por item do pedido: `itemPedido`, `item`, `sku`, `nome`, `descricao`, `categoria`,
-`quantidade`, `currency`, `precoUnitario` e `valorTotal` congelados no encerramento.
-
-### 6.10 `Reembolsos`
-
-| Campo | Tipo | Regras |
-|---|---|---|
-| `pedido`, `numeroPedido`, `cliente` | associações e `String(10)` | Pedido de origem |
-| `statusReembolso` | `Association to StatusReembolso` | `PENDENTE` → `APROVADO` ou `REJEITADO` |
-| `statusPedidoAnterior` | `Association to StatusPedido` | Restaurado se o reembolso for rejeitado |
-| `currency`, `valorReembolso` | `Currency`, `Valor` | Total do pedido |
-| `motivoSolicitacao`, `dataSolicitacao`, `solicitadoPor` | `String(500)`, `Timestamp`, `User` | Do cancelamento |
-| `motivoDecisao`, `dataDecisao`, `decididoPor` | `String(500)`, `Timestamp`, `User` | Da decisão |
-
-### 6.11 `Numeracoes`
-
-`objeto` (`PEDIDO` ou `SKU`) e `ultimoNumero` (`Integer64`). O incremento é um `UPDATE` atômico
-na transação da requisição: um Save que falha também desfaz o número (sem buracos na sequência).
-
-### 6.12 Validações declarativas (`srv/validacoes.cds`)
-
-`@mandatory`, `@assert.format`, `@assert.target` e `@assert` com expressões CDS, avaliados pelo CAP
-nos PATCHs do rascunho (mensagens no Fiori) e no Save:
-
-| Entidade | Validação | Mensagem |
-|---|---|---|
-| `Clientes` | `cpf`, `nome`, `email`, `telefone`, `dataNascimento` obrigatórios | padrão do CAP |
-| `Clientes` | e-mail no formato `nome@dominio.tld` | `EMAIL_INVALIDO` |
-| `Clientes` | telefone com 10 ou 11 dígitos | `TELEFONE_INVALIDO` |
-| `Clientes` | nascimento não futuro | `DATA_NASCIMENTO_FUTURA` |
-| `Enderecos` | `cep` e `numero` obrigatórios | `ENDERECO_NUMERO_OBRIGATORIO` |
-| `Itens` | `nome`, `categoria`, `currency`, `precoUnitario`, `qtdeEstoque` obrigatórios | padrão do CAP |
-| `Itens` | preço `>= 0` | `ITEM_PRECO_INVALIDO` |
-| `Itens` | estoque `>= 0` e `>= qtdeReservada` | `ITEM_QTDE_ESTOQUE_INVALIDA` |
-| `Pedidos` | `cliente` obrigatório | padrão do CAP |
-| `ItensPedido` | `item` obrigatório, quantidade `> 0` | `ITEM_QTDE_INVALIDA` |
-
-Regras que dependem de algoritmo ou de outros registros (dígitos do CPF, unicidade, ViaCEP,
-estoque) ficam nos handlers.
-
----
-
-## 7. Serviços OData
-
-Todos em OData V4, sob `/odata/v4/<caminho>`, com um serviço por aplicação.
-
-| Serviço | Caminho | Entidades expostas | Rascunho | Actions |
-|---|---|---|---|---|
-| `ClientesService` | `clientes` | `Clientes` (com `cidadePrincipal`, `ufPrincipal`), `Enderecos`, `Generos`, `CepsCadastrados`, `Permissoes` (singleton) | `Clientes` (+ `Enderecos`) | `definirEnderecoPrincipal` (vinculada a `Enderecos`), `importarPlanilha` |
-| `EstoqueService` | `estoque` | `Itens`, `Categorias`, `StatusEstoque`, `Permissoes` (singleton) | `Itens` | `importarPlanilha` |
-| `PedidosService` | `pedidos` | `Pedidos` (com dados do cliente e `semReembolso`), `ItensPedido` (com `skuItem`, o SKU do item), `Clientes`, `ClientesAtivos`, `Enderecos`, `Itens`, `ItensAtivos`, CodeLists | `Pedidos` (+ `ItensPedido`) | `efetuarPagamento`, `aprovarPedido`, `cancelarPedido` (vinculadas), `importarPlanilha` |
-| `ReembolsosService` | `reembolsos` | `Reembolsos` (somente leitura, com nome, `cpfCliente` e `cpfClienteFormatado` do cliente), `StatusReembolso`, `StatusPedido` | — | `aprovarReembolso`, `rejeitarReembolso` (vinculadas) |
-| `AnaliticoService` | `analitico` | `PedidosAnalise`, `ClientesAnalise`, `ItensAnalise`, `ReembolsosAnalise` (somente leitura) | — | — |
-
-`CepsCadastrados` é uma visão agregada (um registro por CEP já validado e que não é CEP geral) usada
-como ajuda de valores: escolher um CEP dela evita nova chamada ao ViaCEP. `ClientesAtivos` e
-`ItensAtivos` são as ajudas de valores do pedido (só registros ativos).
-
-### 7.1 Assinaturas das actions
-
-```cds
-// ClientesService
-action definirEnderecoPrincipal() returns Enderecos;                       // vinculada a Enderecos
-action importarPlanilha(arquivo : LargeBinary not null, nomeArquivo : String(255)) returns ResultadoImportacao;
-
-// PedidosService (vinculadas a Pedidos)
-action efetuarPagamento(
-  @mandatory metodoPagamento : String(20),
-  @mandatory numeroCartao    : String(19),
-  @mandatory validade        : String(5),     // MM/AA
-  @mandatory cvv             : String(4)) returns Pedidos;
-action aprovarPedido() returns Pedidos;
-action cancelarPedido(@mandatory motivoCancelamento : String(500)) returns Pedidos;
-
-// ReembolsosService (vinculadas a Reembolsos)
-action aprovarReembolso(motivoDecisao : String(500)) returns Reembolsos;
-action rejeitarReembolso(@mandatory motivoDecisao : String(500)) returns Reembolsos;
-
-// Resultado das importações
-type ResultadoImportacao { registrosCriados : Integer; mensagem : String(255); }
-```
-
-As actions do pedido e do reembolso têm `@Core.OperationAvailable` (o botão só fica ativo no status
-permitido) e `@Common.SideEffects` (a tela recarrega pedido, pagamento e snapshots após a execução).
-
-### 7.2 Funções internas (não expostas)
-
-Reserva, liberação e baixa de estoque, geração de número e de SKU, snapshots, cancelamento por
-reembolso e retomada do pedido **não** são actions OData: são funções de `srv/lib` chamadas pelos
-handlers dentro da transação da requisição.
-
-| Módulo (`srv/lib`) | Responsabilidade |
-|---|--- |
-| `util` | CPF, e-mail, telefone, imagens, SKU, endereço, arredondamento |
-| `viacep` | Consulta ao ViaCEP com cache por processo (100 CEPs) e timeout |
-| `enderecos` | Preenchimento pelo CEP e validações do Save |
-| `numeracao` | Sequenciais de pedido e SKU |
-| `estoque` | Reserva, liberação e baixa com `UPDATE` condicional |
-| `pedidos` | Registro, edição, pagamento, aprovação, cancelamento, reembolso, snapshots e transições atômicas de status |
-| `pagamento-simulado` | Simulação do cartão |
-| `planilha` | Leitor de `.xlsx` (ZIP + XML, sem bibliotecas; até 50 MB por parte descompactada) e `.csv` |
-| `importacao*` | Importações de clientes, estoque e pedidos |
-| `permissoes` | Conteúdo do singleton `Permissoes` (`somenteLeitura` pelo papel do usuário) |
-| `mensagens`, `requisicao` | Atalhos de mensagens e leitura de chave/rascunho/upload |
-
----
-
-## 8. Ciclo de Vida do Pedido
-
-### 8.1 Status do pedido
-
-| Status | Descrição |
-|---|---|
-| *(rascunho)* | Pedido em elaboração, sem número e sem reserva de estoque. |
-| `ABERTO` | Registrado no primeiro Salvar: número gerado, preços fixados, estoque reservado. Itens editáveis. |
-| `AGUARDANDO_APROVACAO` | Pagamento aprovado; estoque ainda reservado; aguarda aprovação. |
-| `PROCESSANDO_REEMBOLSO` | Cancelamento de pedido pago solicitado; aguarda decisão do reembolso. Estoque segue reservado. |
-| `FINALIZADO` | Estoque baixado, snapshots gerados, pedido imutável. |
-| `CANCELADO` | Reserva liberada, snapshots gerados, pedido imutável. |
-
-### 8.2 Status do pagamento (`Pedidos.statusPagamento`)
-
-`PENDENTE` (sem tentativa) → `RECUSADO` ou `APROVADO` (a cada tentativa) → `DEVOLVIDO` (reembolso aprovado).
-
-### 8.3 Transições
-
-```text
-rascunho ──Salvar──▶ ABERTO ──pagamento aprovado──▶ AGUARDANDO_APROVACAO ──aprovar──▶ FINALIZADO
-                      │  ▲ pagamento recusado (fica ABERTO)        │
-                      │                                            └──cancelar──▶ PROCESSANDO_REEMBOLSO
-                      └──cancelar──▶ CANCELADO                                       │
-                                        ▲                                            │
-                                        └──────────── reembolso aprovado ◀───────────┤
-                                     AGUARDANDO_APROVACAO ◀── reembolso rejeitado ───┘
-```
-
-| Origem | Destino | Gatilho | Efeitos |
-|---|---|---|---|
-| rascunho | `ABERTO` | Salvar (draftActivate) | Valida, gera número, fixa preços, calcula total, reserva estoque |
-| `ABERTO` | `ABERTO` | Editar + Salvar | Ajusta a reserva pela diferença |
-| `ABERTO` | `ABERTO` | `efetuarPagamento` recusado | Pagamento `RECUSADO`; nova tentativa permitida |
-| `ABERTO` | `AGUARDANDO_APROVACAO` | `efetuarPagamento` aprovado | Pagamento `APROVADO` |
-| `AGUARDANDO_APROVACAO` | `FINALIZADO` | `aprovarPedido` | Baixa estoque, snapshots `FINALIZACAO`, `dataFinalizacao` |
-| `ABERTO` | `CANCELADO` | `cancelarPedido` (sem pagamento aprovado) | Libera reserva, snapshots `CANCELAMENTO`, dados do cancelamento |
-| `AGUARDANDO_APROVACAO` | `PROCESSANDO_REEMBOLSO` | `cancelarPedido` (pagamento aprovado) | Cria `Reembolsos` `PENDENTE`; reserva mantida |
-| `PROCESSANDO_REEMBOLSO` | `CANCELADO` | `aprovarReembolso` | Libera reserva, snapshots, pagamento `DEVOLVIDO` |
-| `PROCESSANDO_REEMBOLSO` | status anterior | `rejeitarReembolso` | Retoma o status anterior e limpa o motivo do cancelamento |
-| `FINALIZADO` / `CANCELADO` | — | qualquer | Bloqueado: pedido imutável |
-
-### 8.4 Ações disponíveis por status
-
-| Status | Editar | Efetuar Pagamento | Aprovar pedido | Cancelar pedido | Excluir |
-|---|:---:|:---:|:---:|:---:|:---:|
-| rascunho | Sim | Não | Não | Não | Descartar |
-| `ABERTO` | Sim (somente itens) | Sim | Não (pagamento pendente) | Sim | Não |
-| `AGUARDANDO_APROVACAO` | Não | Não | Sim | Sim (abre reembolso) | Não |
-| `PROCESSANDO_REEMBOLSO` | Não | Não | Não | Não | Não |
-| `FINALIZADO` | Não | Não | Não | Não | Não |
-| `CANCELADO` | Não | Não | Não | Não | Não |
-
-As ações só executam sobre o pedido **ativo** e sem rascunho de edição em andamento
-(`ACAO_SOMENTE_ATIVO`, `PEDIDO_EM_EDICAO`). Os handlers das três ações também são registrados no
-rascunho (`Pedidos.drafts`), para que a chamada sobre ele receba essa mensagem (HTTP 409) em vez de
-"sem handler" (HTTP 501). O pedido registrado nunca é excluído: é cancelado.
-
----
-
-## 9. Regras de Negócio
-
-### 9.1 Clientes
-
-- Cadastro e edição com rascunho; o cliente nasce ativo e com score sorteado (0–100), que a UI não altera.
-- CPF e telefone são gravados só com dígitos; e-mail em minúsculas.
-- No Save: CPF com dígitos verificadores válidos (rejeita sequências repetidas) e único.
-- Inativação pela edição do campo `clienteAtivo` (somente `Admin`); não há action específica.
-- Exclusão bloqueada se houver qualquer pedido do cliente, gravado ou em rascunho (`CLIENTE_COM_PEDIDO`).
-- Foto: JPEG, PNG ou WEBP — MIME, extensão e assinatura binária precisam ser coerentes.
-
-### 9.2 Endereços
-
-- Editados no rascunho do cliente; o **primeiro** endereço vira principal automaticamente.
-- Ao informar o CEP, o backend preenche logradouro, bairro, cidade, UF e estado:
-  1. se o CEP já foi validado em outro endereço (e não é CEP geral), reaproveita os dados sem chamar o ViaCEP;
-  2. senão consulta o ViaCEP (`cds.requires.viacep.credentials.url`, timeout de 5 s, cache por processo).
-- CEP inexistente grava `cepStatus = 'I'` e bloqueia o Save (`CEP_INVALIDO`).
-- ViaCEP indisponível grava `cepStatus = 'X'`, avisa na hora e bloqueia o Save (`CEP_INDISPONIVEL`).
-- **CEP geral** (município sem logradouro): logradouro e bairro passam a ser editáveis e obrigatórios.
-- Cidade, UF, estado, `cepGeral`, `cepStatus` e `principal` nunca vêm da UI.
-- Número obrigatório; o mesmo CEP não pode se repetir no mesmo cliente (`CEP_DUPLICADO_CLIENTE`).
-- A action *Definir como principal* (no rascunho ou no ativo) desmarca os demais endereços do cliente.
-- O CEP de um endereço gravado pode ser alterado (a chave é o `ID`).
-
-### 9.3 Itens e estoque
-
-- Cadastro e edição com rascunho; o item nasce ativo, em BRL, com estoque 0 e reserva 0.
-- `qtdeDisponivel` e `statusEstoque` são colunas geradas pelo banco: sempre coerentes e filtráveis,
-  sem rotina de recálculo.
-- `qtdeReservada` só é alterada pelos pedidos; o Save do item ignora o valor recebido e não
-  sobrescreve reservas feitas enquanto o item estava em edição.
-- Inativação (`itemAtivo = false`) bloqueada se houver estoque disponível ou pedido ativo
-  (`ABERTO`, `AGUARDANDO_APROVACAO`, `PROCESSANDO_REEMBOLSO`) ou em rascunho com o item.
-- Exclusão bloqueada se houver reserva ou qualquer pedido (gravado ou em rascunho) com o item.
-- Foto: mesmas regras da foto do cliente.
-
-### 9.4 SKU
-
-- Formato `SKU-<prefixo>-<sequencial>`, ex.: `SKU-ELE-0000000042`.
-- Prefixo: 3 primeiras letras do código da categoria em maiúsculas (completado com `X` se menor).
-- Sequencial: 10 dígitos, objeto `SKU` de `Numeracoes` (único para todo o estoque).
-- Gerado no Save do item novo; **regenerado** quando a categoria muda de prefixo; mantido nos demais casos.
-
-### 9.5 Pedidos
-
-**Rascunho**
-
-- Nasce com status `ABERTO` (provisório), pagamento `PENDENTE`, moeda BRL e total 0.
-- Ao escolher o cliente, o endereço principal é preenchido (side effect na tela); cliente sem
-  endereço principal gera aviso.
-- Nova linha nasce com quantidade 1. Ao escolher o item ou a quantidade, o backend calcula o preço
-  provisório (preço já fixado no pedido, se o item já fazia parte dele) e o total da linha; o total
-  do pedido é recalculado a cada inclusão, alteração ou exclusão de linha.
-- Item sem estoque disponível é barrado ao ser incluído (`ITEM_SEM_ESTOQUE`), salvo se já estava no pedido.
-- O rascunho **não** reserva estoque.
-
-**Registro (primeiro Salvar) — também usado pela importação**
-
-1. cliente obrigatório, existente e ativo, com endereço principal;
-2. ao menos um item; itens existentes e ativos, quantidade `> 0`, moeda BRL;
-3. a soma pedida por item cabe no disponível atual;
-4. fixa o preço de cada linha, calcula os totais;
-5. preenche status `ABERTO`, pagamento `PENDENTE`, endereço e número do pedido;
-6. reserva o estoque (seção 10). Qualquer erro desfaz tudo.
-
-**Edição do pedido `ABERTO`**
-
-- Só os itens mudam; o cliente é imutável (`PEDIDO_CLIENTE_IMUTAVEL`).
-- O Save compara a nova composição com a reserva atual: reserva o acréscimo, libera o excedente e a
-  reserva de itens removidos. Item inativo só barra itens novos ou com quantidade maior.
-- Itens que já estavam no pedido mantêm o preço fixado; itens novos usam o preço atual.
-- Edição bloqueada fora do status `ABERTO` (`PEDIDO_EDICAO_BLOQUEADA`).
-
-### 9.6 Pagamento simulado
-
-- Só no status `ABERTO` (inclusive após recusa).
-- Dados do cartão usados apenas em memória: nunca persistidos, retornados ou registrados.
-- Dados inválidos são **erro de entrada** (HTTP 400, `CARTAO_DADOS_INVALIDOS`), não recusa:
-  método fora da lista, número com menos de 13 ou mais de 19 dígitos, validade fora do formato
-  `MM/AA`, mês inválido, cartão expirado (o mês corrente ainda vale) ou CVV sem 3 ou 4 dígitos.
-- Bandeira: número iniciado em 4 → `VISA`; em 5 → `MASTERCARD`; demais → `OUTRA`.
-- CVV `000` → `RECUSADO` (pedido continua `ABERTO`); demais → `APROVADO` com código `SIMnnnnnn`
-  (pedido vai para `AGUARDANDO_APROVACAO`).
-- A cada tentativa o registro de `Pagamentos` do pedido é substituído (só a última é mantida).
-
-### 9.7 Aprovação
-
-- Só em `AGUARDANDO_APROVACAO` com pagamento `APROVADO` (`PEDIDO_PAGAMENTO_PENDENTE`).
-- Baixa `qtdeEstoque` e `qtdeReservada` dos itens, gera os snapshots (`FINALIZACAO`), preenche
-  `dataFinalizacao` e muda o status para `FINALIZADO`.
-
-### 9.8 Cancelamento
-
-- Permitido em `ABERTO` e `AGUARDANDO_APROVACAO`; motivo obrigatório (`PEDIDO_MOTIVO_CANCEL_OBRIG`).
-- **Sem pagamento aprovado**: libera toda a reserva, gera snapshots (`CANCELAMENTO`), preenche
-  `motivoCancelamento`, `dataCancelamento`, `canceladoPor` e muda para `CANCELADO`.
-- **Com pagamento aprovado**: cria a solicitação de reembolso `PENDENTE` (com o status anterior, o
-  valor e o motivo), guarda o motivo no pedido e muda para `PROCESSANDO_REEMBOLSO`. A reserva continua.
-
-### 9.9 Reembolsos
-
-- As solicitações nascem do cancelamento; a aplicação só consulta e decide.
-- **Aprovar** (motivo opcional): libera a reserva, gera snapshots, cancela o pedido, marca o
-  pagamento do pedido e o registro de `Pagamentos` como `DEVOLVIDO` e grava a decisão.
-- **Rejeitar** (motivo obrigatório): o pedido volta ao status anterior e o motivo do cancelamento é limpo.
-- Cada solicitação é decidida uma única vez (`REEMBOLSO_STATUS_INVALIDO`); a decisão registra
-  `dataDecisao` e `decididoPor`.
-
----
-
-## 10. Reserva, Baixa, Liberação e Concorrência de Estoque
-
-| Movimento | Quando | Efeito | Condição avaliada no banco |
-|---|---|---|---|
-| Reservar | Registro do pedido; acréscimo na edição | `qtdeReservada += q` | item ativo e `qtdeEstoque - qtdeReservada >= q` |
-| Liberar | Redução/remoção na edição; cancelamento; reembolso aprovado | `qtdeReservada -= q` | `qtdeReservada >= q` |
-| Baixar | Aprovação | `qtdeReservada -= q`, `qtdeEstoque -= q` | `qtdeReservada >= q` e `qtdeEstoque >= q` |
-
-**Concorrência:** cada movimento é um único `UPDATE` condicional e atômico (`UPDATE Itens SET ...
-WHERE ID = ? AND <condição>`). A condição usa o saldo **atual** do banco, nunca valores da UI. Se
-outra transação consumiu o saldo, nenhuma linha é alterada e o pedido recebe
-`ITEM_ESTOQUE_INSUFICIENTE`, `ITEM_INATIVO`, `ITEM_RESERVA_INCONSISTENTE` ou
-`ITEM_ESTOQUE_CONCORRENTE`. Como toda a requisição roda numa transação, qualquer erro desfaz também
-os movimentos já aplicados, o número do pedido e os snapshots.
-
-**Transições de status do pedido:** duas ações podem ler o mesmo pedido ao mesmo tempo (ex.: dois
-cancelamentos, ou pagar e cancelar). Por isso toda ação começa por `transicionarPedido`
-(`srv/lib/pedidos`), um `UPDATE Pedidos SET ... WHERE ID = ? AND statusPedido_code = ? AND
-statusPagamento_code = ?` com o estado lido no início da ação. O `UPDATE` também bloqueia a linha até
-o fim da transação. Só a primeira ação muda o status; a outra recebe `PEDIDO_ALTERADO_CONCORRENTE`
-(HTTP 409) antes de mexer no estoque, no pagamento ou nos snapshots, então não há dupla reserva,
-dupla baixa ou dupla liberação. A mesma conferência vale para:
-
-- o **Save da edição** do pedido, que só ajusta a reserva se o pedido continua `ABERTO`;
-- a **decisão do reembolso**, gravada só se a solicitação ainda está `PENDENTE` (de duas decisões
-  simultâneas, a segunda recebe `REEMBOLSO_STATUS_INVALIDO`).
-
-| Status do estoque | Regra |
-|---|---|
-| `SEM_ESTOQUE` | `qtdeDisponivel <= 0` |
-| `ACABANDO` | `1 <= qtdeDisponivel <= 10` |
-| `EM_ESTOQUE` | `qtdeDisponivel >= 11` |
-
----
-
-## 11. Cálculos
+**Validações.** Obrigatoriedade, formato e faixas (e-mail, telefone, nascimento, preço, estoque,
+quantidade) são declarativas em `srv/validacoes.cds` (`@mandatory`, `@assert.format`, `@assert`) e
+aparecem já no rascunho. Regras que dependem de algoritmo ou de outros registros (CPF, unicidade,
+ViaCEP, estoque) ficam nos handlers.
+
+**Cálculos** (sempre no backend):
 
 ```text
 ItensPedido.valorTotal = arredondar(qtdeItemPedido × precoUnitarioSnapshot, 2)
 Pedidos.valorTotal     = arredondar(Σ ItensPedido.valorTotal, 2)
-Itens.qtdeDisponivel   = qtdeEstoque − qtdeReservada            (coluna gerada)
-ItensAnalise.valorEstoque = precoUnitario × qtdeEstoque
+Itens.qtdeDisponivel   = qtdeEstoque − qtdeReservada   (coluna gerada)
 ```
 
-Todos os valores definitivos são calculados no backend; os valores enviados pela UI são ignorados.
-
 ---
 
-## 12. Snapshots e Histórico
+## 4. Serviços OData
 
-- Criados uma única vez, na aprovação (`FINALIZACAO`) ou no cancelamento (`CANCELAMENTO`, inclusive
-  por reembolso aprovado). Tentativa de recriar apenas informa `SNAPSHOT_EXISTENTE`.
-- `PedidosClienteSnapshots` congela cliente e endereço; `PedidosItensSnapshots` congela cada item.
-- São somente leitura em todos os serviços.
-- Na Object Page de um pedido encerrado, as seções "Dados do Cliente" e "Itens" passam a mostrar os
-  snapshots (indicadores `encerrado`/`naoEncerrado`), então alterações posteriores no cadastro não
-  mudam o histórico.
-- Cada item congelado abre a Object Page *Item no encerramento do pedido* (nome, SKU, descrição,
-  categoria, quantidade, preço unitário, total e data do congelamento); cliente e item do snapshot
-  têm links para as apps de Clientes e Estoque (seção 15.4).
+Todos em OData V4, em `/odata/v4/<caminho>`, um por aplicação.
 
----
-
-## 13. Importação por Planilha
-
-Botão **Importar planilha** nas listas de Clientes, Estoque e Pedidos (extensão
-`webapp/ext/ImportarPlanilha.js`), que chama a action `importarPlanilha` do serviço.
-
-### 13.1 Regras gerais
-
-- Formatos: `.xlsx` (inclusive gerado pelo LibreOffice, com textos compartilhados ou *inline*) e
-  `.csv` (separador `;`, `,` ou tabulação; UTF-8 com ou sem BOM, ou Windows-1252). `.xls` é recusado.
-- A primeira linha não vazia é o cabeçalho; nomes de coluna comparados sem acento, espaço,
-  pontuação ou caixa; cada coluna aceita sinônimos; colunas extras são ignoradas.
-- Máximo de 500 linhas de dados; cada parte do `.xlsx` descompactada pode ter até 50 MB (proteção
-  contra arquivos pequenos que se expandem demais).
-- **Tudo ou nada**: todas as linhas são validadas antes de gravar; com qualquer erro nada é gravado
-  e a resposta lista até 15 erros por linha (mais o total omitido).
-- A gravação passa pelo próprio serviço, então valem as mesmas regras da tela (ViaCEP, SKU, reserva...).
-- Modelos prontos em [`modelos-importacao`](modelos-importacao) (`.xlsx` e `.csv`).
-
-### 13.2 Colunas
-
-| Planilha | Colunas obrigatórias | Opcionais | Particularidades |
+| Serviço | Caminho | Entidades principais | Actions |
 |---|---|---|---|
-| Clientes (`Admin`) | CPF, Nome, E-mail, Telefone, Data de nascimento, CEP, Número | Gênero, Complemento | Um cliente por linha com o endereço principal; CPF sem zeros à esquerda é completado; CEP com 5–7 dígitos é completado; data `AAAA-MM-DD`, `DD/MM/AAAA` ou data do Excel; gênero pelo código ou pelo texto; CPF repetido na planilha ou já cadastrado é erro |
-| Estoque (`Admin`) | Nome, Categoria, Quantidade em estoque, Preço unitário | Descrição, Moeda (padrão BRL) | Item criado ativo com SKU; nome já cadastrado ou repetido é erro, sem diferenciar maiúsculas de minúsculas (evita duplicar estoque ao reenviar); preço aceita `1.234,56`, `1234.56` e `R$` |
-| Pedidos (`Comum`/`Admin`) | Pedido (referência), CPF, SKU, Quantidade | Observação | Linhas com a mesma referência formam um pedido; cliente ativo com endereço principal; itens ativos; o disponível precisa cobrir a soma da planilha inteira; cada pedido nasce `ABERTO` com reserva; a referência é gravada no pedido e a mesma referência para o mesmo cliente é recusada enquanto houver pedido não cancelado com ela (reenviar a planilha não duplica pedidos); referência com até 40 caracteres |
+| `ClientesService` | `clientes` | `Clientes` e `Enderecos` (rascunho), `CepsCadastrados`, `Permissoes` | `definirEnderecoPrincipal`, `importarPlanilha` |
+| `EstoqueService` | `estoque` | `Itens` (rascunho), `Categorias`, `Permissoes` | `importarPlanilha` |
+| `PedidosService` | `pedidos` | `Pedidos` e `ItensPedido` (rascunho), `ClientesAtivos`, `ItensAtivos` | `efetuarPagamento`, `aprovarPedido`, `cancelarPedido`, `importarPlanilha` |
+| `ReembolsosService` | `reembolsos` | `Reembolsos` (somente leitura) | `aprovarReembolso`, `rejeitarReembolso` |
+| `AnaliticoService` | `analitico` | `PedidosAnalise`, `ClientesAnalise`, `ItensAnalise`, `ReembolsosAnalise` | — |
+
+```cds
+// PedidosService (vinculadas a Pedidos)
+action efetuarPagamento(metodoPagamento : String(20), numeroCartao : String(19),
+                        validade : String(5), cvv : String(4)) returns Pedidos;
+action aprovarPedido() returns Pedidos;
+action cancelarPedido(motivoCancelamento : String(500)) returns Pedidos;
+
+// ReembolsosService (vinculadas a Reembolsos)
+action aprovarReembolso(motivoDecisao : String(500)) returns Reembolsos;
+action rejeitarReembolso(motivoDecisao : String(500)) returns Reembolsos;   // motivo obrigatório
+
+// ClientesService, EstoqueService e PedidosService
+action importarPlanilha(arquivo : LargeBinary, nomeArquivo : String(255)) returns ResultadoImportacao;
+```
+
+As actions têm `@Core.OperationAvailable` (botão ativo só no status permitido) e
+`@Common.SideEffects` (a tela recarrega após a execução). Reserva, baixa, numeração, snapshots e
+transições de status **não** são expostos: ficam nos módulos de `srv/lib` (`pedidos`, `estoque`,
+`numeracao`, `enderecos`, `viacep`, `pagamento-simulado`, `planilha`, `importacao*`, `permissoes`,
+`util`).
 
 ---
 
-## 14. Camada Analítica
+## 5. Ciclo de Vida do Pedido
 
-`AnaliticoService` expõe quatro visões somente leitura com dimensões e medidas. As medidas têm
-agregação padrão (`@Aggregation.default`) e são *custom aggregates*, então o cliente usa
-`$apply=groupby((dimensão),aggregate(medida))` sem informar o método.
+![Ciclo de vida do pedido](../assets/diagramas/diagrama-ciclo-pedido.png)
 
-| Visão | Dimensões | Medidas |
+*Status do pedido, transições e ações disponíveis em cada status.*
+
+| Origem | Destino | Gatilho | Efeitos |
+|---|---|---|---|
+| rascunho | `ABERTO` | Salvar | Gera número, fixa preços, calcula total, reserva estoque |
+| `ABERTO` | `ABERTO` | Editar itens / pagamento recusado | Ajusta a reserva pela diferença / pagamento `RECUSADO` |
+| `ABERTO` | `AGUARDANDO_APROVACAO` | `efetuarPagamento` aprovado | Pagamento `APROVADO` |
+| `AGUARDANDO_APROVACAO` | `FINALIZADO` | `aprovarPedido` | Baixa o estoque, gera snapshots |
+| `ABERTO` | `CANCELADO` | `cancelarPedido` | Libera a reserva, gera snapshots |
+| `AGUARDANDO_APROVACAO` | `PROCESSANDO_REEMBOLSO` | `cancelarPedido` | Cria reembolso `PENDENTE`; reserva mantida |
+| `PROCESSANDO_REEMBOLSO` | `CANCELADO` | `aprovarReembolso` | Libera a reserva, snapshots, pagamento `DEVOLVIDO` |
+| `PROCESSANDO_REEMBOLSO` | status anterior | `rejeitarReembolso` | Retoma o pedido |
+
+- *Editar* só em `ABERTO`; `FINALIZADO` e `CANCELADO` são imutáveis.
+- As ações só executam sobre o pedido ativo, sem rascunho de edição aberto (HTTP 409,
+  `ACAO_SOMENTE_ATIVO` / `PEDIDO_EM_EDICAO`).
+
+| Rascunho | Registrado (`ABERTO`) |
+| :---: | :---: |
+| ![Rascunho do pedido](../assets/pedidos/fluxo-pedido-01-rascunho.png) | ![Pedido registrado](../assets/pedidos/fluxo-pedido-02-registrado.png) |
+| **Pagamento aprovado** | **Finalizado** |
+| ![Pagamento aprovado](../assets/pedidos/fluxo-pedido-03-pagamento-aprovado.png) | ![Pedido finalizado](../assets/pedidos/fluxo-pedido-04-finalizado.png) |
+
+---
+
+## 6. Regras de Negócio
+
+### 6.1 Clientes e endereços
+
+- O cliente nasce ativo, com score sorteado; CPF e telefone gravados só com dígitos.
+- No Save, o CPF precisa ter dígitos verificadores válidos e ser único.
+- Exclusão bloqueada se houver pedido do cliente, gravado ou em rascunho (`CLIENTE_COM_PEDIDO`).
+- O primeiro endereço vira principal; *Definir como principal* desmarca os demais.
+- Ao informar o CEP, o backend preenche logradouro, bairro, cidade e UF: reaproveita um CEP já
+  validado ou consulta o ViaCEP (timeout de 5 s, cache por processo).
+- CEP inexistente (`I`) ou ViaCEP indisponível (`X`) bloqueia o Save. **CEP geral** (município sem
+  logradouro) torna logradouro e bairro editáveis e obrigatórios.
+- O mesmo CEP não se repete no mesmo cliente; número obrigatório.
+
+![Fluxograma da consulta de CEP](../assets/diagramas/diagrama-endereco-cep.png)
+
+| Rascunho do cliente | Endereço preenchido pelo CEP | Cliente criado |
+| :---: | :---: | :---: |
+| ![Rascunho do cliente](../assets/clientes/fluxo-cliente-01-rascunho.png) | ![Endereço pelo CEP](../assets/clientes/fluxo-cliente-02-endereco-cep.png) | ![Cliente criado](../assets/clientes/fluxo-cliente-03-cliente-criado.png) |
+
+### 6.2 Itens e estoque
+
+- O item nasce ativo, em BRL, com estoque e reserva 0.
+- **SKU** `SKU-<3 letras da categoria>-<10 dígitos>` (ex.: `SKU-ELE-0000000042`), gerado no Save e
+  regenerado se a categoria mudar de prefixo.
+- `qtdeReservada` só é alterada pelos pedidos; o Save do item preserva reservas feitas durante a edição.
+- Inativação bloqueada com estoque disponível ou pedido ativo; exclusão bloqueada com reserva ou pedido.
+
+| Novo item | Item criado com SKU |
+| :---: | :---: |
+| ![Novo item](../assets/estoque/fluxo-estoque-01-novo-item.png) | ![Item criado](../assets/estoque/fluxo-estoque-02-item-criado.png) |
+
+### 6.3 Registro e edição do pedido
+
+- No rascunho, ao escolher o cliente o endereço principal é preenchido; ao escolher item ou
+  quantidade, preço e totais são recalculados. O rascunho **não** reserva estoque e barra itens sem
+  disponível (`ITEM_SEM_ESTOQUE`).
+- O primeiro **Salvar** valida cliente ativo com endereço principal, ao menos um item ativo,
+  quantidade `> 0` e disponível suficiente; então fixa preços, gera o número e reserva o estoque.
+  Qualquer erro desfaz tudo.
+- Na edição (só em `ABERTO`), o cliente é imutável e a reserva é ajustada pela diferença.
+
+![Fluxograma do registro do pedido](../assets/diagramas/diagrama-registro-pedido.png)
+
+### 6.4 Pagamento simulado
+
+- Só em `ABERTO` (inclusive após recusa). Os dados do cartão existem apenas em memória.
+- Dados inválidos (número fora de 13–19 dígitos, validade fora de `MM/AA` ou expirada, CVV sem 3–4
+  dígitos) são erro de entrada (HTTP 400, `CARTAO_DADOS_INVALIDOS`), não recusa.
+- Bandeira pelo primeiro dígito (4 → `VISA`, 5 → `MASTERCARD`, demais → `OUTRA`).
+- CVV `000` → `RECUSADO` (pedido segue `ABERTO`); demais → `APROVADO` com código `SIMnnnnnn`.
+- Só a última tentativa é mantida em `Pagamentos`.
+- O diálogo é uma ação customizada (`webapp/ext/EfetuarPagamento.js`) com `sap.m.MaskInput` no
+  cartão (`9999 9999 9999 9999`), validade (`99/99`) e CVV; o botão só habilita com tudo preenchido.
+
+![Fluxograma do Efetuar Pagamento](../assets/diagramas/diagrama-efetuar-pagamento.png)
+
+![Diálogo Efetuar Pagamento com máscara](../assets/pedidos/pagamento-mascara.png)
+
+*Diálogo Efetuar Pagamento com máscara no cartão, na validade e no CVV.*
+
+### 6.5 Aprovação
+
+Só em `AGUARDANDO_APROVACAO` com pagamento `APROVADO`. Baixa estoque e reserva, gera os snapshots
+(`FINALIZACAO`), preenche `dataFinalizacao` e muda para `FINALIZADO`.
+
+![Fluxograma da aprovação do pedido](../assets/diagramas/diagrama-aprovacao-pedido.png)
+
+### 6.6 Cancelamento e reembolso
+
+- Cancelamento permitido em `ABERTO` e `AGUARDANDO_APROVACAO`, com motivo obrigatório.
+- **Sem pagamento aprovado:** libera a reserva, gera snapshots (`CANCELAMENTO`) e cancela.
+- **Com pagamento aprovado:** cria o reembolso `PENDENTE` e o pedido vai para
+  `PROCESSANDO_REEMBOLSO`, mantendo a reserva.
+- **Aprovar reembolso** (motivo opcional): cancela o pedido, libera a reserva, gera snapshots e
+  marca o pagamento como `DEVOLVIDO`.
+- **Rejeitar reembolso** (motivo obrigatório): o pedido volta ao status anterior.
+- Cada solicitação é decidida uma única vez (`REEMBOLSO_STATUS_INVALIDO`).
+
+![Fluxograma do cancelamento e do reembolso](../assets/diagramas/diagrama-cancelamento-reembolso.png)
+
+| Motivo do cancelamento | Pedido pago enviado para reembolso |
+| :---: | :---: |
+| ![Motivo do cancelamento](../assets/pedidos/fluxo-cancelamento-01-motivo.png) | ![Reembolso aberto](../assets/pedidos/fluxo-cancelamento-02-reembolso-aberto.png) |
+| **Pedido em processamento de reembolso** | **Pedido aberto cancelado** |
+| ![Processando reembolso](../assets/pedidos/fluxo-cancelamento-03-processando-reembolso.png) | ![Pedido cancelado](../assets/pedidos/fluxo-cancelamento-04-pedido-aberto-cancelado.png) |
+| **Solicitação pendente** | **Aprovar reembolso** |
+| ![Solicitação de reembolso](../assets/reembolsos/fluxo-reembolso-01-solicitacao.png) | ![Aprovar reembolso](../assets/reembolsos/fluxo-reembolso-02-aprovar.png) |
+| **Reembolso aprovado** | **Pedido cancelado e pagamento devolvido** |
+| ![Reembolso aprovado](../assets/reembolsos/fluxo-reembolso-03-aprovado.png) | ![Pedido cancelado pelo reembolso](../assets/reembolsos/fluxo-reembolso-04-pedido-cancelado.png) |
+| **Rejeitar com motivo** | **Reembolso rejeitado** |
+| ![Rejeitar reembolso](../assets/reembolsos/fluxo-reembolso-05-rejeitar.png) | ![Reembolso rejeitado](../assets/reembolsos/fluxo-reembolso-06-rejeitado.png) |
+
+### 6.7 Snapshots
+
+Criados uma única vez, na aprovação ou no cancelamento. Na Object Page do pedido encerrado, as
+seções Dados do Cliente e Itens passam a mostrar os snapshots, então mudanças posteriores no
+cadastro não alteram o histórico.
+
+---
+
+## 7. Estoque e Concorrência
+
+| Movimento | Quando | Efeito | Condição no banco |
+|---|---|---|---|
+| Reservar | Registro; acréscimo na edição | `qtdeReservada += q` | item ativo e disponível `>= q` |
+| Liberar | Redução na edição; cancelamento; reembolso aprovado | `qtdeReservada -= q` | `qtdeReservada >= q` |
+| Baixar | Aprovação | `qtdeReservada -= q`, `qtdeEstoque -= q` | reserva e estoque `>= q` |
+
+- Cada movimento é um único `UPDATE ... WHERE ID = ? AND <condição>` sobre o saldo atual do banco.
+  Se outra transação consumiu o saldo, nenhuma linha muda e o pedido recebe um erro
+  (`ITEM_ESTOQUE_INSUFICIENTE`, `ITEM_ESTOQUE_CONCORRENTE`...).
+- Toda ação do pedido começa por `transicionarPedido`, um `UPDATE` condicionado ao status lido.
+  Entre duas ações simultâneas, só a primeira é aplicada; a outra recebe
+  `PEDIDO_ALTERADO_CONCORRENTE` (HTTP 409) antes de tocar no estoque.
+- Como a requisição roda numa transação, qualquer erro desfaz movimentos, número e snapshots.
+
+---
+
+## 8. Importação por Planilha
+
+Botão **Importar planilha** nas listas de Clientes, Estoque e Pedidos.
+
+- `.xlsx` ou `.csv` (separador `;`, `,` ou tabulação); até 500 linhas; nomes de coluna comparados
+  sem acento, espaço ou caixa.
+- **Tudo ou nada:** todas as linhas são validadas antes de gravar; com qualquer erro nada é gravado
+  e os erros são listados por linha.
+- A gravação passa pelo próprio serviço, com as mesmas regras da tela.
+- Modelos em [`modelos-importacao`](modelos-importacao).
+
+| Planilha | Colunas obrigatórias | Observações |
 |---|---|---|
-| `PedidosAnalise` | número, status do pedido, status do pagamento, UF, mês de criação (`AAAAMM`), moeda | `valorTotal` (soma), `valorMedio` (média), `qtdePedidos` |
-| `ClientesAnalise` | nome, gênero, ativo, UF, faixa de score (`BAIXO` < 40, `MEDIO` ≤ 70, `ALTO`), mês de cadastro | `qtdeClientes`, `scoreMedio` (média) |
-| `ItensAnalise` | SKU, nome, categoria, status do estoque, ativo, moeda | `qtdeEstoque`, `qtdeReservada`, `qtdeDisponivel`, `valorEstoque`, `qtdeItens` |
-| `ReembolsosAnalise` | número, status, motivo, UF, mês da solicitação, moeda | `valorReembolso`, `qtdeReembolsos` |
+| Clientes (`Admin`) | CPF, Nome, E-mail, Telefone, Data de nascimento, CEP, Número | Um cliente por linha, com o endereço principal |
+| Estoque (`Admin`) | Nome, Categoria, Quantidade em estoque, Preço unitário | Nome já cadastrado é recusado, sem diferenciar maiúsculas |
+| Pedidos | Pedido (referência), CPF, SKU, Quantidade | Linhas com a mesma referência formam um pedido; reenviar a planilha não duplica pedidos |
 
-Cada domínio tem a sua app freestyle de análise, com barra de filtros, indicadores (KPIs), 5 gráficos
-(colunas ou rosca) e uma página de detalhe por análise (gráfico ampliado e tabela), num total de 20
-análises. O botão **Abrir gestão** navega para a app de gestão do domínio.
+![Fluxograma da importação por planilha](../assets/diagramas/diagrama-importacao-planilha.png)
 
-| App | Visão | Indicadores | Análises | Abrir gestão |
-|---|---|---|---|---|
-| Análise de Pedidos de Compras (`analise-pedidos`) | `PedidosAnalise` | valor total, pedidos, ticket médio | valor por status; quantidade por mês; valor por UF; quantidade por status de pagamento; ticket médio por status | `PedidoCompra-manage` |
-| Análise de Clientes (`analise-clientes`) | `ClientesAnalise` | clientes, score médio | por gênero; por UF; por faixa de score; cadastros por mês; score médio por UF | `Cliente-manage` |
-| Análise de Itens do Estoque (`analise-estoque`) | `ItensAnalise` | itens, em estoque, reservada, disponível, valor em estoque | reservado × disponível por categoria; itens por situação; valor por categoria; 10 mais reservados; itens por categoria | `ItemEstoque-manage` |
-| Análise de Pedidos de Reembolsos (`analise-reembolsos`) | `ReembolsosAnalise` | reembolsos, valor | valor por status; quantidade por status; valor por mês; valor por UF; quantidade por motivo | `Reembolso-manage` |
-
-As quatro apps têm a mesma estrutura: `model/Scenarios.js` (medidas, dimensões, filtros e cenários
-do domínio), `model/AnalyticsQuery.js` (montagem do `$apply`), `service/AnalyticsService.js`,
-`control/AnalysisChart.js` e `control/FilterBar.js`, rotas do painel (padrão vazio) e do detalhe (`analise/{scenario}`), e
-testes QUnit em `webapp/test/unit`.
+| Escolha da planilha | Importação concluída | Recusa por nome duplicado |
+| :---: | :---: | :---: |
+| ![Escolha da planilha](../assets/estoque/fluxo-importacao-01-planilha.png) | ![Resultado da importação](../assets/estoque/fluxo-importacao-02-resultado.png) | ![Erro de duplicidade](../assets/estoque/fluxo-importacao-03-erro-duplicado.png) |
 
 ---
 
-## 15. Interface do Usuário
+## 9. Análises
 
-### 15.1 Aplicações
+`AnaliticoService` expõe quatro visões somente leitura, consultadas com
+`$apply=groupby((dimensão),aggregate(medida))`. Cada domínio tem uma app freestyle com barra de
+filtros, indicadores, 5 gráficos, página de detalhe por análise e o botão **Abrir gestão**.
 
-| Aplicação | Tipo | Caminho | Serviço |
-|---|---|---|---|
-| Gestão de Clientes | Fiori Elements V4 — List Report/Object Page | `/gestaoclientes/index.html` | `ClientesService` |
-| Gestão de Estoque | Fiori Elements V4 — List Report/Object Page | `/gestaoestoque/index.html` | `EstoqueService` |
-| Pedidos de Compras | Fiori Elements V4 — List Report/Object Page | `/pedidoscompras/index.html` | `PedidosService` |
-| Gestão de Reembolsos | Fiori Elements V4 — List Report/Object Page | `/gestaoreembolsos/index.html` | `ReembolsosService` |
-| Análise de Pedidos de Compras | SAPUI5 freestyle | `/analisepedidos/index.html` | `AnaliticoService` |
-| Análise de Clientes | SAPUI5 freestyle | `/analiseclientes/index.html` | `AnaliticoService` |
-| Análise de Itens do Estoque | SAPUI5 freestyle | `/analiseestoque/index.html` | `AnaliticoService` |
-| Análise de Pedidos de Reembolsos | SAPUI5 freestyle | `/analisereembolsos/index.html` | `AnaliticoService` |
-| Launchpad local | Sandbox do SAP Fiori launchpad | `/launchpad.html` | — |
-
-O launchpad tem um tile por aplicação (oito). Os *intents* (`Cliente-manage`, `ItemEstoque-manage`,
-`PedidoCompra-manage`, `Reembolso-manage`, `AnalisePedidos-display`, `AnaliseClientes-display`,
-`AnaliseEstoque-display`, `AnaliseReembolsos-display`) são os mesmos dos *inbounds* dos manifests, o
-que habilita a navegação entre apps (seção 15.4). A configuração liga a resolução de *intents* no
-cliente (`services.NavTargetResolutionInternal.config.enableClientSideTargetResolution`): sem ela o
-shell não informa os objetos semânticos disponíveis e o Fiori Elements esconde os links.
-
-### 15.2 Listas e filtros
-
-| App | Colunas | Filtros |
+| App | Indicadores | Análises |
 |---|---|---|
-| Clientes | Foto, CPF, Nome, E-mail, Telefone, Ativo, Cidade, UF, Criado em, Score (barra colorida) | Nome, CPF, E-mail, Ativo, Cidade, UF |
-| Estoque | Foto, SKU, Nome, Categoria, Estoque, Reservada, Disponível, Status (colorido), Preço, Ativo | SKU, Nome, Categoria, Status, Ativo, Disponível |
-| Pedidos | Número, CPF, Cliente, Status do pedido, Status do pagamento, Total, Criado em, Finalizado em | Cliente, CPF, Status do pedido, Status do pagamento, Data, Total |
-| Reembolsos | Número do pedido, Cliente, Status, Valor, Motivo, Data da solicitação, Motivo da decisão | Número do pedido, Cliente, Status |
+| Análise de Pedidos de Compras | Valor total, pedidos, ticket médio | Valor por status, quantidade por mês, valor por UF, status de pagamento, ticket médio |
+| Análise de Clientes | Clientes, score médio | Por gênero, por UF, por faixa de score, cadastros por mês, score médio por UF |
+| Análise de Itens do Estoque | Itens, estoque, reservada, disponível, valor | Reservado × disponível, situação, valor por categoria, 10 mais reservados, itens por categoria |
+| Análise de Pedidos de Reembolsos | Reembolsos, valor | Valor e quantidade por status, valor por mês, valor por UF, quantidade por motivo |
 
-### 15.3 Object Page do pedido
-
-- Cabeçalho com status do pedido, status do pagamento e total; menu *Ações* com *Efetuar
-  Pagamento*, *Aprovar pedido* e *Cancelar pedido*, habilitados conforme o status (seção 8.4). O
-  mesmo menu fica na barra da lista, para os pedidos selecionados.
-- Seções: Dados do Cliente, Dados do Pedido, Itens, Pagamento (última tentativa), Finalização
-  (só `FINALIZADO`) e Cancelamento (só `CANCELADO`).
-- Pedido encerrado: Dados do Cliente e Itens vêm dos snapshots.
-- O usuário informa apenas o **Cliente** (só na criação) e os itens. CPF, e-mail, telefone, gênero,
-  nascimento e endereço de entrega são preenchidos automaticamente pela associação `cliente` e são
-  somente leitura (`@Core.Computed`); os demais campos do pedido são mantidos pelo backend.
-- A seção Pagamento é somente leitura (`Pagamentos` é `@readonly` no `PedidosService`): só a ação
-  *Efetuar Pagamento* grava o pagamento, e a edição dos itens não o altera.
-- *Editar* só aparece em `ABERTO`; *Excluir* nunca aparece para o pedido registrado.
-- Side effects: trocar o cliente recarrega endereço e dados do cliente; alterar item ou quantidade
-  recarrega preço, total da linha e total do pedido.
-- Pedido com solicitação de reembolso: o campo *Solicitação de reembolso* (em Dados do Pedido) abre
-  o reembolso na Gestão de Reembolsos; fica oculto quando o pedido não tem reembolso
-  (`semReembolso`, calculado na projeção do serviço).
-
-#### Diálogo *Efetuar Pagamento*
-
-O diálogo padrão de parâmetros do Fiori Elements usa campos de texto livre, sem máscara de digitação
-(`UI.InputMask` no parâmetro só formata e valida, não guia a digitação). Por isso a ação é uma ação
-customizada do manifest (`webapp/ext/EfetuarPagamento.js`) que abre um diálogo próprio:
-
-| Campo | Controle | Máscara | Enviado à action |
-|---|---|---|---|
-| Método de pagamento | `sap.m.Select` sobre `MetodosPagamento` (ordenado por `ordem`) | — | código |
-| Número do cartão | `sap.m.MaskInput` | `9999 9999 9999 9999` | só os dígitos |
-| Validade | `sap.m.MaskInput` | `99/99` (MM/AA) | `MM/AA` |
-| CVV | `sap.m.MaskInput` | `999` | só os dígitos |
-
-- O botão *Efetuar Pagamento* do diálogo só habilita com o método escolhido, todos os campos
-  completos e o mês da validade entre 01 e 12 (fora disso o campo fica em erro).
-- A confirmação chama a mesma action vinculada pelo `editFlow.invokeAction` (sem o diálogo padrão),
-  que trata mensagens, side effects e a atualização da tela. Se o backend recusar os dados, o diálogo
-  continua aberto para correção; o backend continua validando tudo (seção 9.6).
-- Na lista, a ação vale para os pedidos selecionados em `ABERTO`; na Object Page, só habilita em
-  `ABERTO`.
-- Os dados do cartão existem só nos controles do diálogo, destruído ao fechar.
-
-### 15.4 Navegação entre aplicações
-
-Os campos abaixo viram links para o registro na app de destino (no launchpad local). A app de destino
-abre direto a Object Page pela chave semântica (`cpf` do cliente, `sku` do item, `numeroPedido` do
-pedido), enviada no contexto da navegação.
-
-| Origem | Campos com link | Destino (intent) | Parâmetro |
-|---|---|---|---|
-| Pedidos (lista e Object Page) | Cliente, CPF | Gestão de Clientes (`Cliente-manage`) | `cpfCliente` → `cpf` (`Common.SemanticObjectMapping`) |
-| Itens do pedido | Item, SKU | Gestão de Estoque (`ItemEstoque-manage`) | `skuItem` → `sku` |
-| Object Page do pedido | Solicitação de reembolso (só com reembolso) | Gestão de Reembolsos (`Reembolso-manage`) | `numeroPedido` |
-| Pedido encerrado (snapshot do cliente) | Nome, CPF | Gestão de Clientes (`Cliente-manage`) | `cpf` |
-| Item no encerramento (snapshot do item) | Nome, SKU | Gestão de Estoque (`ItemEstoque-manage`) | `sku` |
-| Reembolsos (lista e Object Page) | Pedido | Pedidos de Compras (`PedidoCompra-manage`) | `numeroPedido` |
-| Reembolsos (lista e Object Page) | Cliente, CPF | Gestão de Clientes (`Cliente-manage`) | `cpfCliente` → `cpf` |
-| Apps de análise | Botão *Abrir gestão* | App de gestão do domínio | — |
-
-- O Pedido do reembolso e a Solicitação de reembolso do pedido usam
-  `UI.DataFieldWithIntentBasedNavigation` (link direto, sem popover): como chave semântica, numa
-  coluna comum o número seria exibido como identificador, sem link.
-- Os demais usam `Common.SemanticObject` + `Common.SemanticObjectMapping`; o CPF entra no
-  `RequestAtLeast` das listas para estar sempre no contexto.
-- No rascunho, os campos projetados pela associação não acompanham a troca de cliente ou item: os
-  handlers de `PATCH` atualizam `cpfCliente`, `cpfClienteFormatado` e `skuItem`.
+| Pedidos | Clientes |
+| :---: | :---: |
+| ![Análise de Pedidos](../assets/analises/analise-pedidos.png) | ![Análise de Clientes](../assets/analises/analise-clientes.png) |
+| **Estoque** | **Reembolsos** |
+| ![Análise de Estoque](../assets/analises/analise-estoque.png) | ![Análise de Reembolsos](../assets/analises/analise-reembolsos.png) |
+| **Filtro por status** | **Detalhe de uma análise** |
+| ![Filtro por status](../assets/analises/fluxo-analise-01-filtro-status.png) | ![Detalhe da análise](../assets/analises/fluxo-analise-02-detalhe-pedidos.png) |
 
 ---
 
-## 16. Mensagens
+## 10. Interface do Usuário
 
-Arquivo `_i18n/messages.properties`. Parâmetros nomeados entre chaves.
+| Aplicação | Tipo | Caminho |
+|---|---|---|
+| Gestão de Clientes | Fiori Elements V4 | `/gestaoclientes/index.html` |
+| Gestão de Estoque | Fiori Elements V4 | `/gestaoestoque/index.html` |
+| Pedidos de Compras | Fiori Elements V4 | `/pedidoscompras/index.html` |
+| Gestão de Reembolsos | Fiori Elements V4 | `/gestaoreembolsos/index.html` |
+| Análises (4 apps) | SAPUI5 freestyle | `/analisepedidos`, `/analiseclientes`, `/analiseestoque`, `/analisereembolsos` |
+| Launchpad local | Sandbox do SAP Fiori launchpad | `/launchpad.html` |
 
-| Chave | Mensagem |
-|---|---|
-| `CLIENTE_CPF_INVALIDO` | CPF inválido. Verifique o número informado. |
-| `CLIENTE_CPF_DUPLICADO` | Já existe um cliente cadastrado com este CPF. |
-| `CLIENTE_INATIVO` | Cliente inativo não pode realizar pedido. |
-| `CLIENTE_COM_PEDIDO` | Cliente não pode ser excluído pois possui pedido vinculado. |
-| `CLIENTE_SEM_ENDERECO_PRINCIPAL` | Cliente selecionado não possui endereço principal válido. |
-| `CEP_INDISPONIVEL` | Não foi possível validar o CEP agora. Tente novamente em instantes. |
-| `CEP_INVALIDO` | CEP inválido ou não encontrado. Verifique o número informado. |
-| `CEP_DUPLICADO_CLIENTE` | Já existe um endereço cadastrado com este CEP para este cliente. |
-| `ENDERECO_NUMERO_OBRIGATORIO` | Número do endereço é obrigatório. |
-| `FOTO_FORMATO_INVALIDO` | Formato de imagem inválido. Utilize JPEG, PNG ou WEBP. |
-| `EMAIL_INVALIDO` | E-mail em formato inválido. |
-| `TELEFONE_INVALIDO` | Telefone deve conter 10 ou 11 dígitos (DDD + número). |
-| `DATA_NASCIMENTO_FUTURA` | Data de nascimento não pode ser futura. |
-| `CAMPO_OBRIGATORIO` | Campo {campo} é obrigatório. |
-| `VALOR_INVALIDO` | Valor inválido para o campo {campo}. |
-| `ITEM_SKU_DUPLICADO` | Já existe item cadastrado com este SKU. |
-| `ITEM_ESTOQUE_INSUFICIENTE` | Estoque insuficiente para o item {sku} (disponível: {disponivel}). |
-| `ITEM_ESTOQUE_CONCORRENTE` | Estoque do item {sku} alterado por outra operação. Atualize e tente de novo. |
-| `ITEM_INATIVO` | Item {sku} inativo não pode ser usado em novo pedido. |
-| `ITEM_SEM_ESTOQUE` | Item {sku} está sem estoque disponível e não pode ser adicionado ao pedido. |
-| `ITEM_INATIVACAO_BLOQUEADA` | Item possui estoque disponível ou pedido ativo. Inativação bloqueada. |
-| `ITEM_EXCLUSAO_BLOQUEADA` | Item não pode ser excluído pois está vinculado a pedido ou reserva. |
-| `ITEM_QTDE_INVALIDA` | Quantidade do item deve ser maior que zero. |
-| `ITEM_PRECO_INVALIDO` | Preço unitário deve ser maior ou igual a zero. |
-| `ITEM_QTDE_ESTOQUE_INVALIDA` | Quantidade em estoque não pode ser negativa nem menor que a reservada. |
-| `ITEM_RESERVA_INCONSISTENTE` | Reserva do item {sku} inconsistente com o pedido. |
-| `PEDIDO_SEM_ITENS` | Pedido deve possuir ao menos um item. |
-| `PEDIDO_CONFIRMADO` | Pedido {numero} registrado. Estoque reservado. |
-| `PEDIDO_ATUALIZADO` | Pedido {numero} atualizado. Reserva de estoque ajustada. |
-| `PEDIDO_EDICAO_BLOQUEADA` | Pedido só pode ser editado no status ABERTO. |
-| `PEDIDO_EXCLUSAO_BLOQUEADA` | Pedido registrado não pode ser excluído. Utilize Cancelar pedido. |
-| `PEDIDO_CLIENTE_IMUTAVEL` | O cliente de um pedido registrado não pode ser alterado. |
-| `PEDIDO_EM_EDICAO` | Pedido {numero} está em edição. Salve ou descarte o rascunho antes de executar esta ação. |
-| `PEDIDO_ALTERADO_CONCORRENTE` | O pedido {numero} foi alterado por outra operação. Atualize a tela e tente novamente. |
-| `ACAO_SOMENTE_ATIVO` | Esta ação só pode ser executada sobre o pedido salvo (fora do modo de edição). |
-| `PEDIDO_STATUS_INVALIDO` | Transição de status não permitida (status atual: {status}). |
-| `PEDIDO_PAGAMENTO_PENDENTE` | Pagamento pendente. O pedido não pode ser finalizado. |
-| `PEDIDO_FINALIZADO` | Pedido {numero} finalizado com sucesso. |
-| `PEDIDO_FINALIZADO_IMUTAVEL` | Pedido finalizado não pode ser alterado. |
-| `PEDIDO_CANCELADO` | Pedido {numero} cancelado. |
-| `PEDIDO_CANCELADO_IMUTAVEL` | Pedido cancelado não pode ser alterado. |
-| `PEDIDO_MOTIVO_CANCEL_OBRIG` | Informe o motivo do cancelamento. |
-| `PEDIDO_REEMBOLSO_SOLICITADO` | Pedido {numero} enviado para processamento de reembolso. |
-| `CARTAO_DADOS_INVALIDOS` | Dados do cartão inválidos: {erro}. |
-| `PAGAMENTO_APROVADO` | Pagamento aprovado com sucesso. |
-| `PAGAMENTO_RECUSADO` | Pagamento recusado. O pedido permanecerá aguardando pagamento. |
-| `SNAPSHOT_EXISTENTE` | Snapshot do pedido já foi gerado e não pode ser recriado. |
-| `REEMBOLSO_APROVADO` | Reembolso do pedido {numero} aprovado. Pedido cancelado. |
-| `REEMBOLSO_REJEITADO` | Reembolso do pedido {numero} rejeitado. Pedido retomado. |
-| `REEMBOLSO_STATUS_INVALIDO` | Solicitação de reembolso não está mais pendente. |
-| `REEMBOLSO_MOTIVO_DECISAO_OBRIG` | Informe o motivo da decisão sobre o reembolso. |
-| `IMPORTACAO_CONCLUIDA` | Importação concluída: {quantidade} registro(s) criado(s). |
-| `IMPORTACAO_CANCELADA` | Importação cancelada: nenhum registro foi gravado ({quantidade} erro(s)). |
-| `IMPORTACAO_DETALHE` | {texto} (erro de uma linha da planilha) |
-| `SEM_AUTORIZACAO` | Usuário sem autorização para esta operação. |
+| Gestão de Clientes | Gestão de Estoque |
+| :---: | :---: |
+| ![Lista de clientes](../assets/clientes/clientes.png) | ![Lista de itens](../assets/estoque/estoque.png) |
+| **Pedidos de Compras** | **Gestão de Reembolsos** |
+| ![Lista de pedidos](../assets/pedidos/pedidos.png) | ![Lista de reembolsos](../assets/reembolsos/reembolsos.png) |
+
+**Object Page do pedido.** Cabeçalho com status e total; menu *Ações* (Efetuar Pagamento, Aprovar,
+Cancelar) habilitado conforme o status; seções Dados do Cliente, Dados do Pedido, Itens, Pagamento,
+Finalização e Cancelamento. O usuário informa só o cliente (na criação) e os itens.
+
+![Object Page de um pedido finalizado](../assets/pedidos/pedido-object-page.png)
+
+**Navegação entre apps.** Cliente/CPF, Item/SKU, Pedido e Solicitação de reembolso viram links que
+abrem o registro na app de destino (intents `Cliente-manage`, `ItemEstoque-manage`,
+`PedidoCompra-manage`, `Reembolso-manage`). As análises navegam pela ação *Abrir gestão*.
+
+![Abrir gestão a partir de uma análise](../assets/analises/fluxo-analise-06-abrir-gestao.png)
+
+*Gestão de Reembolsos aberta pelo botão Abrir gestão da análise de reembolsos.*
+
+**Mensagens.** Todas as mensagens de negócio estão em `_i18n/messages.properties`, com chaves por
+domínio (`CLIENTE_*`, `CEP_*`, `ITEM_*`, `PEDIDO_*`, `PAGAMENTO_*`, `REEMBOLSO_*`, `IMPORTACAO_*`).
 
 ---
 
-## 17. Critérios de Aceite
-
-Cada critério tem teste automatizado correspondente (seção 20).
-
-### 17.1 Clientes e endereços
-
-- Dado um `Admin`, quando criar um cliente com CPF válido e único e um endereço com CEP válido,
-  então o endereço é preenchido pelo ViaCEP, vira principal, e o cliente é salvo ativo, com score
-  entre 0 e 100, e-mail em minúsculas e CPF/telefone formatados para exibição.
-- Dado um CEP já cadastrado, quando informado em outro endereço, então o ViaCEP não é consultado.
-- Dado um CPF inválido ou já cadastrado, quando salvar, então o Save é bloqueado.
-- Dado e-mail inválido, telefone fora de 10/11 dígitos ou nascimento futuro, quando salvar, então o Save é bloqueado.
-- Dado um CEP inexistente ou o ViaCEP indisponível, quando salvar, então o Save é bloqueado.
-- Dado um CEP geral, então logradouro e bairro ficam editáveis e obrigatórios.
-- Dado um endereço sem número ou dois endereços com o mesmo CEP, quando salvar, então o Save é bloqueado.
-- Dado dois endereços, quando *Definir como principal* for executado em um deles (rascunho ou ativo), então só ele fica principal.
-- Dado um usuário `Comum`, quando tentar criar ou editar cliente, então recebe HTTP 403.
-- Dado um usuário `Comum`, então `Permissoes.somenteLeitura` é `true` e a app esconde Criar, Editar, Excluir, Importar e *Definir como principal*; para o `Admin` é `false`.
-- Dado um cliente com pedido, quando excluído, então a exclusão é bloqueada; sem pedido, é excluído.
-- Dado um upload de foto cuja assinatura não confere com o MIME, então é recusado.
-
-### 17.2 Estoque
-
-- Dado um item novo, quando salvo, então recebe SKU `SKU-<CAT>-<10 dígitos>` único, ativo e em BRL.
-- Dado um item, quando a categoria muda de prefixo, então o SKU é regenerado; senão é mantido.
-- Dado estoque 0, 10 e 11 sem reserva, então o status é `SEM_ESTOQUE`, `ACABANDO` e `EM_ESTOQUE`.
-- Dado preço negativo ou estoque menor que a reserva, quando salvar, então o Save é bloqueado.
-- Dado um item em edição, quando um pedido reservar unidades no meio tempo, então o Save do item preserva a reserva.
-- Dado um item com estoque disponível, quando inativado, então é bloqueado; sem estoque e sem pedido, é permitido.
-- Dado um item vinculado a pedido, quando excluído, então é bloqueado; item livre é excluído.
-
-### 17.3 Pedidos
-
-- Dado um rascunho, então nenhuma reserva é feita e o total provisório é calculado.
-- Dado um rascunho válido, quando salvo, então o pedido fica `ABERTO`, com número de 10 dígitos, pagamento `PENDENTE` e estoque reservado.
-- Dado quantidade acima do disponível ou pedido sem itens, quando salvo, então nada é registrado nem reservado.
-- Dado um item sem estoque, quando incluído no rascunho, então é barrado na hora.
-- Dado um pedido `ABERTO`, quando itens forem aumentados, incluídos, reduzidos ou removidos, então a reserva é ajustada pela diferença.
-- Dado um pedido registrado, quando o cliente for trocado, então a operação é bloqueada.
-- Dado um pedido `FINALIZADO`, quando editado ou excluído, então a operação é bloqueada.
-
-### 17.4 Pagamento, aprovação e cancelamento
-
-- Dado o diálogo *Efetuar Pagamento*, quando o cartão, a validade ou o CVV estiverem incompletos ou o mês for maior que 12, então o botão de confirmação fica desabilitado; o cartão é digitado no formato `9999 9999 9999 9999`.
-- Dado um pedido `ABERTO`, quando o pagamento for recusado (CVV 000), então continua `ABERTO`; quando aprovado, vai para `AGUARDANDO_APROVACAO`.
-- Dado qualquer tentativa, então só o resultado seguro da última é gravado e nada sensível aparece.
-- Dado um cartão expirado, então a resposta é erro de dados, não recusa.
-- Dado um pedido sem pagamento aprovado, quando aprovado, então é bloqueado; com pagamento aprovado, o estoque é baixado, os snapshots gerados e o pedido `FINALIZADO`.
-- Dado um pedido sem pagamento aprovado, quando cancelado com motivo, então a reserva é liberada, os snapshots gerados e o pedido `CANCELADO`; sem motivo, é bloqueado.
-- Dado um pedido pago, quando cancelado, então vai para `PROCESSANDO_REEMBOLSO`, mantém a reserva e cria o reembolso `PENDENTE`.
-- Dado um pedido em edição ou um rascunho, quando uma ação for executada, então é bloqueada (HTTP 409, `ACAO_SOMENTE_ATIVO` no rascunho).
-- Dado duas ações simultâneas sobre o mesmo pedido (ex.: dois cancelamentos, ou pagar e cancelar), então só a primeira é aplicada; a outra é recusada com `PEDIDO_ALTERADO_CONCORRENTE` sem alterar estoque, reserva, pagamento ou motivo.
-
-### 17.5 Reembolsos
-
-- Dado um reembolso pendente, quando aprovado, então o pedido é cancelado, a reserva liberada, os snapshots gerados e o pagamento `DEVOLVIDO`.
-- Dado um reembolso pendente, quando rejeitado com motivo, então o pedido volta a `AGUARDANDO_APROVACAO`; sem motivo, é bloqueado.
-- Dado um reembolso já decidido, quando decidido de novo, então é bloqueado.
-
-### 17.6 Importação e análises
-
-- Dada uma planilha válida, então todos os registros são criados; com qualquer erro, nada é gravado e os erros são listados por linha.
-- Dada uma planilha de pedidos cuja demanda total excede o disponível, então a importação é cancelada.
-- Dado um `Comum`, quando importar clientes ou estoque, então recebe HTTP 403.
-- Dado um item cadastrado como "Importado Caneta", quando a planilha trouxer "IMPORTADO CANETA", então a importação é recusada (nome já cadastrado).
-- Dado um `.xlsx` cujo conteúdo descompactado passa de 50 MB, então a leitura é recusada com mensagem de erro.
-- Os modelos de `docs/modelos-importacao` importam sem erro.
-- Dado um pedido importado com a referência P001 para um cliente, quando a mesma planilha é importada de novo, então é recusada (`o pedido P001 do cliente ... já foi importado`) e nada é gravado; outro cliente pode usar P001, e o cancelamento do pedido libera a referência.
-- As agregações `$apply` respondem nos quatro domínios, e a contagem de pedidos da análise fecha com o total de pedidos do serviço transacional.
-- Cada app de análise mostra só o seu domínio (indicadores e 5 gráficos), abre o detalhe de cada análise e navega para a app de gestão do domínio.
-
----
-
-## 18. Segurança
-
-- Autorização declarativa (`@requires`/`@restrict`) em todos os serviços; validações críticas no backend.
-- Dados de cartão nunca persistidos, retornados ou registrados; só o resultado seguro é gravado.
-- Campos controlados pelo backend (status, totais, número, reserva, score, endereço do pedido) ignoram valores da UI.
-- Pedidos encerrados e snapshots são imutáveis; o pedido registrado é cancelado, nunca excluído.
-- Exclusões de clientes e itens bloqueadas quando há vínculo com pedidos.
-- Uploads de imagem validados por MIME, extensão e assinatura binária.
-- Movimentos de estoque transacionais e atômicos.
-- URL do ViaCEP configurável por ambiente (`cds_requires_viacep_credentials_url`), sem credenciais no código.
-
----
-
-## 19. Implementações JavaScript e TypeScript
-
-O repositório mantém duas implementações completas e equivalentes da mesma aplicação:
+## 11. JavaScript × TypeScript
 
 | Aspecto | `nodejs-padrao` | `nodejs-typescript` |
 |---|---|---|
-| Linguagem dos handlers | JavaScript ESM (`srv/*.js`, `srv/lib/*.js`) | TypeScript 6.0 `strict` (`srv/*.ts`, `srv/lib/*.ts`) |
-| Acesso às entidades | `this.entities`, `cds.entities('pedidoscompras')` | Classes geradas pelo cds-typer, importadas de `#cds-models/...` |
-| Consultas | `cds.ql` | `SELECT`/`INSERT`/`UPDATE`/`DELETE` globais tipados |
-| Parâmetros de actions | `req.data` sem tipo | Tipos derivados do modelo (`typeof Pedido.actions.efetuarPagamento.__parameters`) |
-| Nomes de tipos | — | Singulares definidos em `srv/typer.cds` (`@singular`) |
-| Execução local | `cds watch` | `cds-tsx watch` (tsx) |
-| Testes | `node --test` (`*.test.js`) | `node --import tsx --test` (`*.test.ts`, `CDS_TYPESCRIPT=tsx`) |
-| Lint | ESLint (recomendado do CAP) | ESLint + `typescript-eslint` + `tsc --noEmit` |
-| Build | `cds build` copia os `.js` | `cds build` compila com `tsc` (`tsconfig.cdsbuild.json`) para `gen/srv` |
-| Gerador de dados | `scripts/gerar-dados-demo.js` | `scripts/gerar-dados-demo.ts` (gera os mesmos CSVs) |
-| Criação do banco local | `scripts/preparar-sqlite.js` (`prewatch`) | `scripts/preparar-sqlite.ts` (`prewatch`, via `tsx`) |
-| Modelo CDS, apps (inclusive `webapp/ext` e testes QUnit), dados, i18n | — | Idênticos |
+| Handlers | JavaScript ESM | TypeScript 6.0 `strict` |
+| Entidades e consultas | `cds.entities`, `cds.ql` | Classes do cds-typer (`#cds-models/...`), consultas tipadas |
+| Execução | `cds watch` | `cds-tsx watch` |
+| Build | `cds build` copia os `.js` | `cds build` compila com `tsc` |
+| Modelo CDS, apps, dados e i18n | Idênticos | Idênticos |
 
-Regra de manutenção: qualquer mudança de regra de negócio deve ser feita nas duas versões, com o
-teste correspondente nas duas suítes.
+Regra de manutenção: toda mudança de regra de negócio é feita nas duas versões, com teste nas duas
+suítes.
 
-### 19.1 Comandos
-
-| Ação | `nodejs-padrao` | `nodejs-typescript` |
-|---|---|---|
-| Instalar | `npm install` | `npm install` |
-| Executar | `npm run watch` (cria o `db.sqlite` se não existir) | `npm run watch` (idem) |
-| Recriar o banco local | `npm run db:deploy` | `npm run db:deploy` |
-| Testar | `npm test` | `npm test` |
-| Lint | `npm run lint` | `npm run lint` (inclui verificação de tipos) |
-| Gerar tipos | — | `npm run typer` |
-| Build de produção | `cds build --production` | `npm run build` |
-| Regenerar dados | `npm run dados:demo` | `npm run dados:demo` |
-| Depurar (VS Code / BAS) | Configuração *cds serve* (`cds serve --with-mocks --in-memory?`, que usa o `db.sqlite` configurado; crie-o antes com `npm run watch` ou `npm run db:deploy`) | Idem (o `cds serve` carrega os handlers `.ts`) |
-
-O `.vscode` de cada implementação é o gerado pelo `cds init`, o mesmo que o SAP Business Application
-Studio cria num projeto CAP: a configuração de depuração *cds serve* (`launch.json`), a tarefa
-*cds watch* (`tasks.json`) e as extensões recomendadas. Elas usam o `cds` global
-(`npm i -g @sap/cds-dk`); abra a pasta da implementação como workspace para depurar.
+| Comando | Ação |
+|---|---|
+| `npm install` | Instala as dependências |
+| `npm run watch` | Executa (cria o `db.sqlite` na primeira vez) |
+| `npm run db:deploy` | Recria o banco local |
+| `npm test` | Executa os testes |
+| `npm run lint` | Lint (no TypeScript, inclui verificação de tipos) |
+| `npm run dados:demo` | Regenera os dados de demonstração |
 
 ---
 
-## 20. Testes Automatizados
+## 12. Testes e Critérios de Aceite
 
-74 testes na versão JavaScript e 76 na TypeScript (`node:test` + `@cap-js/cds-test`), sempre num
-SQLite em memória (`--in-memory`, sem tocar no `db.sqlite`), com um servidor ViaCEP falso local (sem rede externa) e um gerador de `.xlsx` mínimo. São permanentes:
-devem ser mantidos e ajustados junto com as regras de negócio.
+Testes `node:test` + `@cap-js/cds-test` em SQLite em memória, com ViaCEP falso local: 74 em
+JavaScript e 76 em TypeScript. As apps de análise têm testes QUnit em
+`/<app>/test/testsuite.qunit.html`.
 
-| Arquivo | Cobertura |
-|---|--- |
-| `unidade.test` | CPF, e-mail, telefone, imagens, status de estoque, SKU, pagamento simulado, leitor XLSX/CSV (inclusive o limite do conteúdo descompactado) |
-| `clientes.test` | Rascunho, ViaCEP, CEP geral, CEP único, endereço principal, CPF, autorização (inclusive `Permissoes`), exclusão, foto (formato e gravação depois do Save) |
-| `estoque.test` | SKU, disponibilidade e status, concorrência com edição, inativação, exclusão, `Permissoes` e foto gravada depois do Save |
-| `pedidos.test` | Registro com reserva, edição pela diferença, pagamento, aprovação, cancelamento (inclusive ações recusadas no rascunho e ações com o pedido alterado por outra operação), reembolso, campos somente leitura (cliente e pagamento) |
-| `reembolsos.test` | Aprovar, rejeitar (motivo obrigatório), decisão única |
-| `importacao.test` | Clientes, estoque e pedidos (tudo ou nada), nomes e pedidos já importados recusados e modelos de `docs/` |
+| Arquivo | Critérios cobertos |
+|---|---|
+| `unidade.test` | CPF, e-mail, telefone, imagens, SKU, status de estoque, pagamento simulado, leitor XLSX/CSV |
+| `clientes.test` | ViaCEP e reaproveitamento de CEP, CEP geral, endereço principal, CPF, permissões, exclusão, foto |
+| `estoque.test` | SKU, status, reserva preservada na edição, inativação, exclusão, permissões, foto |
+| `pedidos.test` | Registro com reserva, edição pela diferença, pagamento, aprovação, cancelamento, ações simultâneas, campos somente leitura |
+| `reembolsos.test` | Aprovar, rejeitar com motivo, decisão única |
+| `importacao.test` | Tudo ou nada, duplicidades recusadas, modelos de `docs/` |
 | `analitico.test` | Agregações `$apply` dos quatro domínios |
 
-As apps de análise têm testes **QUnit** (`app/analise-*/webapp/test/unit`) do catálogo de cenários
-(`Scenarios`) e da montagem das consultas (`AnalyticsQuery`), abertos no navegador com o servidor em
-execução: `/<app>/test/testsuite.qunit.html` (ex.: `/analisepedidos/test/testsuite.qunit.html`).
-
 ---
 
-## 21. Estrutura do Repositório
+## 13. Estrutura de Cada Implementação
 
 ```text
-sap-cap-nodejs-pedidos-de-compras-app/
-├── docs/
-│   ├── especificacao-tecnica.md      esta especificação
-│   ├── especificacao-tecnica.docx    a mesma especificação em Word
-│   └── modelos-importacao/           modelos .xlsx e .csv de clientes, estoque e pedidos
-├── nodejs-padrao/                    implementação em JavaScript
-└── nodejs-typescript/                implementação em TypeScript
-```
-
-Estrutura de cada implementação (as diferenças estão marcadas):
-
-```text
-├── _i18n/messages.properties         mensagens de negócio
-├── app/
-│   ├── common.cds                    rótulos, textos de CodeList, campos somente leitura
-│   ├── services.cds                  reúne as anotações das apps
-│   ├── gestao-clientes/              Fiori Elements (annotations.cds + webapp/, com webapp/ext/ImportarPlanilha.js)
-│   ├── gestao-estoque/               Fiori Elements (+ importação)
-│   ├── pedidos-compras/              Fiori Elements (+ importação e webapp/ext/EfetuarPagamento.js)
-│   ├── gestao-reembolsos/            Fiori Elements
-│   ├── analise-pedidos/              SAPUI5 freestyle: Análise de Pedidos de Compras
-│   ├── analise-clientes/             SAPUI5 freestyle: Análise de Clientes
-│   ├── analise-estoque/              SAPUI5 freestyle: Análise de Itens do Estoque
-│   ├── analise-reembolsos/           SAPUI5 freestyle: Análise de Pedidos de Reembolsos
-│   ├── launchpad.html                sandbox do Fiori launchpad
-│   └── launchpad/                    configuração e inicialização do launchpad
-├── db/
-│   ├── common.cds                    tipos e CodeLists
-│   ├── schema.cds                    entidades
-│   └── data/                         CodeLists e dados de demonstração (CSV)
-├── srv/
-│   ├── *-service.cds                 serviços (um por aplicação) + analitico-service.cds
-│   ├── *-service.js | *.ts           handlers
-│   ├── validacoes.cds                @mandatory / @assert
-│   ├── typer.cds                     (só TypeScript) nomes dos tipos gerados
-│   └── lib/                          regras de domínio
-├── scripts/gerar-dados-demo.js | .ts gerador dos CSVs de demonstração
-├── scripts/preparar-sqlite.js | .ts  cria o db.sqlite antes do primeiro watch
-├── test/                             testes automatizados e apoio
-├── tsconfig*.json                    (só TypeScript) verificação de tipos e build
+├── _i18n/messages.properties   mensagens de negócio
+├── app/                        apps, launchpad e anotações
+├── db/                         common.cds, schema.cds e data/ (CSV)
+├── srv/                        serviços, handlers, validações e lib/
+├── scripts/                    gerador de dados e preparação do SQLite
+├── test/                       testes automatizados
 └── package.json
 ```
 
 ---
 
-## 22. Histórico de Revisões desta Especificação
+## 14. Implantação na SAP BTP (pendente)
 
-### 22.1 O que mudou da versão 1 para a 2
+![Arquitetura alvo na SAP BTP](../assets/diagramas/diagrama-arquitetura-btp.png)
 
-| Tema | Versão 1 (planejada) | Versão 2 (implementada) |
-|---|---|---|
-| Status do pedido | `CRIADO`, `AGUARDANDO_PAGAMENTO`, `AGUARDANDO_APROVACAO`, `FINALIZADO`, `CANCELADO` | `ABERTO`, `AGUARDANDO_APROVACAO`, `PROCESSANDO_REEMBOLSO`, `CANCELADO`, `FINALIZADO` |
-| Registro do pedido | Action `confirmarPedido` | O Salvar do rascunho registra e reserva |
-| Pagamento | Action `simularPagamentoPedido` (com nome do titular), retornando `Pagamentos` | Action `efetuarPagamento` (método, número, validade, CVV), retornando `Pedidos` |
-| Cancelamento de pedido pago | Cancelava direto | Abre reembolso (`PROCESSANDO_REEMBOLSO`) e app Gestão de Reembolsos |
-| Status do pagamento | `PENDENTE`, `APROVADO`, `RECUSADO` | + `DEVOLVIDO`; réplica em `Pedidos.statusPagamento` |
-| Edição após reserva | Opcional (recomendação de bloquear) | Permitida em `ABERTO`, com ajuste pela diferença |
-| Exclusão de pedido | Permitida em `CRIADO` | Pedido registrado nunca é excluído (só o rascunho é descartado) |
-| SKU | `CCC-NNN-DDD-0001` (categoria, nome, descrição) | `SKU-<3 letras da categoria>-<10 dígitos>` |
-| CodeLists | `StatusItensEstoque`, `StatusPedidos`, `StatusPagamentos` | `StatusEstoque`, `StatusPedido`, `StatusPagamento`, `StatusReembolso` |
-| Calculados | `virtual` preenchidos em `after READ` | Elementos calculados no banco (`qtdeDisponivel`/`statusEstoque` `stored`) |
-| Fotos | JPEG ou PNG | JPEG, PNG ou WEBP, com assinatura binária |
-| Itens | Peso e dimensões | Não modelados |
-| Endereço | `enderecoPrincipal` (Boolean) | `principal`, `cepGeral`, `cepStatus`, CEP geral e reaproveitamento de CEP |
-| Papéis | `PedidosCompras.Comum`/`PedidosCompras.Admin`, usuários `Comum`/`Admin` | Papéis `Comum`/`Admin`, usuários `comum`/`admin` |
-| Interface | App única com navegação interna | 8 apps independentes (4 de gestão, 4 de análise) + launchpad com navegação entre elas |
-| Novos recursos | — | Reembolsos, importação por planilha, camada analítica, dados de demonstração |
-| Testes | Fora do escopo inicial | 68 testes automatizados por versão |
-| Linguagem | Node.js | JavaScript e TypeScript |
-| Estrutura | `srv/handlers`, `srv/utils`, `.cdsrc.json`, `mta.yaml`, `xs-security.json` | Um serviço por app, `srv/lib`, configuração no `package.json`; MTA e XSUAA pendentes |
+*SAP Build Work Zone e HTML5 Application Repository, serviço CAP e db-deployer no Cloud Foundry, HDI
+container no SAP HANA Cloud e XSUAA.*
 
-### 22.2 Revisão 2.1
+- SAP HANA Cloud: `@cap-js/hana` e o perfil `[production]` já configurados; falta implantar.
+- XSUAA (`xs-security.json` com `Admin` e `Comum`) e *role collections*.
+- `mta.yaml` (`cds add xsuaa,html5-repo,workzone,mta`), `mbt build` e `cf deploy`.
+- Apps no SAP Build Work Zone.
 
-| Tema | Versão 2.0 | Versão 2.1 |
-|---|---|---|
-| Campos do pedido | Dados do cliente e pagamento apareciam editáveis | Só o Cliente (na criação) e os itens são informados; dados do cliente vêm da associação; pagamento e snapshots somente leitura; observação somente leitura na tela |
-| Navegação entre apps | Cliente e item do pedido | Pedido → Cliente (Cliente, CPF) e Item (Item, SKU); Reembolso → Pedido e Cliente (Cliente, CPF), abrindo direto o registro (seção 15.4) |
-| Importação de pedidos | A mesma planilha podia ser importada várias vezes | `referenciaImportacao` (coluna Pedido) como chave de idempotência por cliente (seção 13.2) |
-| Testes | 63 por versão | 68 por versão |
-
-### 22.3 Revisão 2.2
-
-| Tema | Versão 2.1 | Versão 2.2 |
-|---|---|---|
-| Análises | Uma app (`analise-compras`) com seletor de domínio | Quatro apps, uma por domínio, cada uma com o seu tile e o botão *Abrir gestão* (seção 14) |
-| Testes QUnit das análises | Desatualizados (nomes de campo antigos) | Reescritos por domínio, todos passando |
-| Efetuar Pagamento | Diálogo padrão do Fiori Elements, sem máscara | Diálogo próprio com máscara no cartão, validade e CVV (seção 15.3) |
-| Object Pages | Item histórico sem conteúdo; snapshots e reembolso sem link | Object Page do item no encerramento; links do snapshot do cliente e dos itens; link do pedido para o reembolso (seção 15.4) |
-| Launchpad | Cinco tiles; links por objeto semântico podiam não aparecer | Oito tiles; resolução de *intents* no cliente ligada |
-
-### 22.4 Revisão 2.3
-
-| Tema | Versão 2.2 | Versão 2.3 |
-|---|---|---|
-| Permissões na UI | O usuário `Comum` via Criar, Editar, Excluir e Importar em Clientes e Estoque (o backend recusava) | Singleton `Permissoes` esconde essas opções (seção 4) |
-| Ações no rascunho | Chamadas sobre o rascunho respondiam HTTP 501 (sem handler) | HTTP 409 com `ACAO_SOMENTE_ATIVO` (seção 8.4) |
-| Importação de estoque | Nome já cadastrado comparado com diferença de maiúsculas | Comparado sem diferenciar maiúsculas de minúsculas (seção 13.2) |
-| Leitor de `.xlsx` | Sem limite para o conteúdo descompactado | Até 50 MB por parte descompactada (seção 13.1) |
-| Código-fonte | Funções com documentação parcial | Comentários explicam a aplicação CAP; todas as funções documentadas (JSDoc/TSDoc) |
-| Testes | 68 por versão | 71 (JavaScript) e 73 (TypeScript) |
-
-### 22.5 Revisão 2.4
-
-| Tema | Versão 2.3 | Versão 2.4 |
-|---|---|---|
-| Ações simultâneas no pedido | A ação mudava o status no fim, sem conferir o status lido; um segundo cancelamento simultâneo liberava a reserva de novo (consumindo reservas de outros pedidos) | Transição de status atômica no início de cada ação; a ação que perde a corrida recebe `PEDIDO_ALTERADO_CONCORRENTE` sem efeito (seção 10) |
-| Decisão do reembolso | Gravada depois do lado do pedido, sem conferir a solicitação | Gravada primeiro, só com a solicitação `PENDENTE` (seção 10) |
-| Pagar e aprovar | Regras no handler do serviço | Em `srv/lib/pedidos` (`efetuarPagamento`, `finalizarPedido`), como o cancelamento (seção 7.2) |
-| Testes | 71 (JavaScript) e 73 (TypeScript) | 72 (JavaScript) e 74 (TypeScript) |
-
-### 22.6 Revisão 2.5
-
-| Tema | Versão 2.4 | Versão 2.5 |
-|---|---|---|
-| Upload de foto (cliente e item) | Só o MIME era gravado: a validação da foto roda em dois handlers *before* do mesmo evento, em paralelo, e os dois liam o mesmo stream; um deles ficava sem bytes e gravava a foto vazia | `lerConteudo` (`srv/lib/requisicao`) lê cada stream uma vez só e devolve o mesmo conteúdo às duas chamadas; a foto é gravada inteira |
-| Banco de desenvolvimento | SQLite em memória, recriado a cada reinício do `cds watch` | SQLite em arquivo (`db.sqlite`) no perfil `[development]`, criado no primeiro `npm run watch` e mantido entre reinícios; `npm run db:deploy` recria |
-| Banco de produção | Não configurado | `@cap-js/hana` nas dependências e perfil `[production]` com o SAP HANA Cloud; `@cap-js/sqlite` só em `devDependencies` |
-| Testes | 72 (JavaScript) e 74 (TypeScript) | 74 (JavaScript) e 76 (TypeScript), em SQLite em memória |
+**Evoluções futuras:** histórico de tentativas de pagamento, auditoria e logs estruturados,
+monitoramento, armazenamento externo de imagens, gateway de pagamento e frete reais, estoque mínimo
+por item.
 
 ---
 
-## 23. Pendências e Backlog
+## 15. Histórico de Revisões
 
-**Implantação (pendente)**
-
-- SAP HANA Cloud: o `@cap-js/hana` e o perfil `[production]` já estão configurados, e o
-  `cds build --production` gera os artefatos HDI. O modelo usa apenas funções portáveis do CAP
-  (`substring`, `length`, `year`, `month`, `case`) e colunas geradas, suportadas pelo HANA, mas a
-  aplicação ainda não foi implantada nem executada no HANA Cloud.
-- XSUAA (`xs-security.json` com os papéis `Admin` e `Comum`) e *role collections* na SAP BTP.
-- Descritor MTA (`cds add mta`) e deploy no Cloud Foundry.
-- Exposição das apps no SAP Build Work Zone.
-
-**Evoluções futuras**
-
-- Histórico completo de tentativas de pagamento.
-- Auditoria de alterações críticas e logs estruturados.
-- Monitoramento produtivo.
-- Armazenamento externo de imagens.
-- Integração real com gateway de pagamento e com serviço de frete.
-- Estoque mínimo configurável por item.
-- TypeScript 7 (compilador nativo) quando `typescript-eslint` e o plugin ESLint das apps Fiori o suportarem.
+| Versão | Principais mudanças |
+|---|---|
+| 2.0 | Sistema implementado: novos status do pedido, registro no Salvar, reembolsos, importação, análises, 8 apps e testes |
+| 2.1 | Campos somente leitura no pedido, navegação entre apps, importação de pedidos sem duplicidade |
+| 2.2 | Quatro apps de análise, máscara no pagamento, navegações das Object Pages |
+| 2.3 | Permissões na UI, ações recusadas no rascunho (HTTP 409), limites na importação |
+| 2.4 | Transições de status atômicas nas ações do pedido |
+| 2.5 | Fotos gravadas corretamente, SQLite em arquivo e SAP HANA Cloud configurado |
+| 2.6 | Especificação simplificada, com diagramas e capturas de tela |
