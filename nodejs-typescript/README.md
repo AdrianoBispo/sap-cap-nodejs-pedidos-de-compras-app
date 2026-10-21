@@ -23,6 +23,8 @@ modelo CDS pelo **cds-typer**.
 | Análise de Pedidos de Reembolsos | `/analisereembolsos/index.html` | `/odata/v4/analitico` (`AnaliticoService`) |
 | Launchpad local | `/launchpad.html` | — |
 
+Páginas, recursos da interface, navegação entre apps e o README de cada app: [`app/README.md`](app/README.md).
+
 ## Tecnologias
 
 | Camada | Tecnologia |
