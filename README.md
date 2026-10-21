@@ -80,13 +80,62 @@ Quatro apps de **gestão** (Fiori Elements: List Report + Object Page) e quatro 
 <details>
 <summary>Mais capturas de tela</summary>
 
-| Gestão de Clientes | Gestão de Estoque |
-| :----------------: | :---------------: |
-| <img src="assets/clientes/clientes.png" alt="Lista de clientes" width="440"> | <img src="assets/estoque/estoque.png" alt="Lista de itens de estoque" width="440"> |
+### Gestão de Clientes: cadastro com endereço pelo CEP
 
-| Gestão de Reembolsos | Efetuar Pagamento |
-| :------------------: | :---------------: |
-| <img src="assets/reembolsos/reembolsos.png" alt="Lista de reembolsos" width="440"> | <img src="assets/pedidos/pagamento-mascara.png" alt="Diálogo Efetuar Pagamento com máscara no cartão, validade e CVV" width="440"> |
+| Lista de clientes | Rascunho do cliente |
+| :---------------: | :-----------------: |
+| <img src="assets/clientes/clientes.png" alt="Lista de clientes" width="440"> | <img src="assets/clientes/fluxo-cliente-01-rascunho.png" alt="Cliente em rascunho" width="440"> |
+
+| Endereço preenchido pelo CEP (ViaCEP) | Cliente cadastrado |
+| :-----------------------------------: | :----------------: |
+| <img src="assets/clientes/fluxo-cliente-02-endereco-cep.png" alt="Endereço do cliente preenchido pelo CEP via ViaCEP" width="440"> | <img src="assets/clientes/fluxo-cliente-03-cliente-criado.png" alt="Object Page do cliente cadastrado" width="440"> |
+
+### Gestão de Estoque
+
+| Lista de itens | Novo item | Item cadastrado |
+| :------------: | :-------: | :-------------: |
+| <img src="assets/estoque/estoque.png" alt="Lista de itens de estoque" width="290"> | <img src="assets/estoque/fluxo-estoque-01-novo-item.png" alt="Novo item de estoque em rascunho" width="290"> | <img src="assets/estoque/fluxo-estoque-02-item-criado.png" alt="Object Page do item cadastrado" width="290"> |
+
+<p align="center">
+  <img src="assets/estoque/fluxo-permissoes-estoque-usuario-comum.png" alt="Gestão de Estoque vista pelo usuário Comum, sem os botões Criar, Excluir e Importar planilha" width="700"><br>
+  <sub>Usuário <code>Comum</code> na Gestão de Estoque: sem Criar, Excluir ou Importar planilha.</sub>
+</p>
+
+### Importação por planilha
+
+| Escolha da planilha | Importação concluída | Recusa por nome duplicado |
+| :-----------------: | :------------------: | :-----------------------: |
+| <img src="assets/estoque/fluxo-importacao-01-planilha.png" alt="Diálogo de escolha da planilha de importação" width="290"> | <img src="assets/estoque/fluxo-importacao-02-resultado.png" alt="Resultado da importação por planilha" width="290"> | <img src="assets/estoque/fluxo-importacao-03-erro-duplicado.png" alt="Importação recusada por nome de item duplicado" width="290"> |
+
+### Pedidos de Compras: do rascunho à finalização
+
+| Rascunho com itens inline | Pedido registrado (estoque reservado) | Efetuar Pagamento |
+| :-----------------------: | :-----------------------------------: | :---------------: |
+| <img src="assets/pedidos/fluxo-pedido-01-rascunho.png" alt="Pedido em rascunho com itens" width="290"> | <img src="assets/pedidos/fluxo-pedido-02-registrado.png" alt="Pedido registrado com status Aberto e pagamento Pendente" width="290"> | <img src="assets/pedidos/pagamento-mascara.png" alt="Diálogo Efetuar Pagamento com máscara no cartão, validade e CVV" width="290"> |
+
+| Pagamento aprovado (cartão mascarado) | Pedido finalizado |
+| :-----------------------------------: | :---------------: |
+| <img src="assets/pedidos/fluxo-pedido-03-pagamento-aprovado.png" alt="Seção Pagamento com status Aprovado, bandeira VISA e cartão mascarado" width="440"> | <img src="assets/pedidos/fluxo-pedido-04-finalizado.png" alt="Pedido finalizado" width="440"> |
+
+### Cancelamento com pagamento aprovado e Gestão de Reembolsos
+
+| Cancelar pedido (motivo) | Pedido pago enviado para reembolso | Pedido em processamento de reembolso |
+| :----------------------: | :--------------------------------: | :----------------------------------: |
+| <img src="assets/pedidos/fluxo-cancelamento-01-motivo.png" alt="Diálogo Cancelar pedido com motivo" width="290"> | <img src="assets/pedidos/fluxo-cancelamento-02-reembolso-aberto.png" alt="Mensagem de pedido enviado para processamento de reembolso" width="290"> | <img src="assets/pedidos/fluxo-cancelamento-03-processando-reembolso.png" alt="Pedido com status Processando reembolso" width="290"> |
+
+| Lista de reembolsos | Solicitação pendente | Aprovar reembolso (motivo opcional) |
+| :-----------------: | :------------------: | :---------------------------------: |
+| <img src="assets/reembolsos/reembolsos.png" alt="Lista de reembolsos" width="290"> | <img src="assets/reembolsos/fluxo-reembolso-01-solicitacao.png" alt="Solicitação de reembolso pendente" width="290"> | <img src="assets/reembolsos/fluxo-reembolso-02-aprovar.png" alt="Diálogo Aprovar reembolso" width="290"> |
+
+| Reembolso aprovado | Rejeitar reembolso (motivo obrigatório) | Reembolso rejeitado |
+| :----------------: | :-------------------------------------: | :-----------------: |
+| <img src="assets/reembolsos/fluxo-reembolso-03-aprovado.png" alt="Reembolso aprovado" width="290"> | <img src="assets/reembolsos/fluxo-reembolso-05-rejeitar.png" alt="Diálogo Rejeitar reembolso com motivo" width="290"> | <img src="assets/reembolsos/fluxo-reembolso-06-rejeitado.png" alt="Reembolso rejeitado" width="290"> |
+
+| Pedido aberto cancelado (sem pagamento) | Pedido cancelado pelo reembolso aprovado |
+| :-------------------------------------: | :--------------------------------------: |
+| <img src="assets/pedidos/fluxo-cancelamento-04-pedido-aberto-cancelado.png" alt="Seção Cancelamento de um pedido aberto, com motivo, data e usuário" width="440"> | <img src="assets/reembolsos/fluxo-reembolso-04-pedido-cancelado.png" alt="Pedido cancelado com pagamento devolvido" width="440"> |
+
+### Análises: painéis
 
 | Análise de Pedidos de Compras | Análise de Clientes |
 | :---------------------------: | :-----------------: |
@@ -95,6 +144,21 @@ Quatro apps de **gestão** (Fiori Elements: List Report + Object Page) e quatro 
 | Análise de Itens do Estoque | Análise de Pedidos de Reembolsos |
 | :-------------------------: | :------------------------------: |
 | <img src="assets/analises/analise-estoque.png" alt="Painel da Análise de Itens do Estoque" width="440"> | <img src="assets/analises/analise-reembolsos.png" alt="Painel da Análise de Pedidos de Reembolsos" width="440"> |
+
+### Análises: filtros e detalhe de cada análise
+
+| Filtro por status do pedido | Detalhe de uma análise de pedidos |
+| :-------------------------: | :-------------------------------: |
+| <img src="assets/analises/fluxo-analise-01-filtro-status.png" alt="Análise de Pedidos de Compras filtrada pelo status Finalizado" width="440"> | <img src="assets/analises/fluxo-analise-02-detalhe-pedidos.png" alt="Detalhe de uma análise de pedidos" width="440"> |
+
+| Detalhe de uma análise de clientes | Detalhe de uma análise do estoque | Detalhe de uma análise de reembolsos |
+| :--------------------------------: | :-------------------------------: | :----------------------------------: |
+| <img src="assets/analises/fluxo-analise-03-detalhe-clientes.png" alt="Detalhe de uma análise de clientes" width="290"> | <img src="assets/analises/fluxo-analise-04-detalhe-estoque.png" alt="Detalhe de uma análise do estoque" width="290"> | <img src="assets/analises/fluxo-analise-05-detalhe-reembolsos.png" alt="Detalhe de uma análise de reembolsos" width="290"> |
+
+<p align="center">
+  <img src="assets/analises/fluxo-analise-06-abrir-gestao.png" alt="Gestão de Reembolsos aberta pelo botão Abrir gestão da análise de reembolsos" width="700"><br>
+  <sub>Gestão de Reembolsos aberta pelo botão <b>Abrir gestão</b> da análise de reembolsos (navegação entre apps).</sub>
+</p>
 
 </details>
 
@@ -253,6 +317,7 @@ arquitetura alvo está no [diagrama da BTP](assets/diagramas/diagrama-arquitetur
 
 | Versão | Mudanças |
 | --- | --- |
+| v1.12 | "Mais capturas de tela" com os fluxos completos de cada app (cadastro, importação, pedido, cancelamento, reembolso e análises), no formato do projeto RAP |
 | v1.11 | README principal simplificado, com foco na visão geral; detalhes remetidos à especificação técnica |
 | v1.10 | Especificação técnica 2.6 simplificada e ilustrada com diagramas e capturas de tela |
 | v1.9 | Correção da gravação de fotos; SQLite em arquivo em desenvolvimento e SAP HANA Cloud em produção |
